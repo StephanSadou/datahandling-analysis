@@ -1,5 +1,5 @@
 # Below are the packages required to run all our scripts for the assignment 
-required_packages <- c("httr", "arrow", "dplyr", "tidyr", "tibble", "FAOSTAT", "jsonlite", "data.table", "rstudioapi")
+required_packages <- c("httr", "arrow", "dplyr", "tidyr", "tibble", "scales", "ggplot2", "FAOSTAT", "jsonlite", "data.table", "rstudioapi")
 
 # Checking what are the R packages installed on the system 
 installed_packages <- .packages(all.available = TRUE) 
