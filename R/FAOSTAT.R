@@ -45,6 +45,7 @@ crops_info <- quiet(FAOSTAT::get_faostat_bulk(code = "QCL", data_folder = "data_
 # --------------------------------------------------------------------- #
 # ----------- Step 2: Find and unzip the 'Normalized' file ------------ # 
 # --------------------------------------------------------------------- #
+
 norm_zip <- list.files(dir_raw,
                        pattern = "Normalized.*\\.zip$",
                        full.names = TRUE,
@@ -77,16 +78,66 @@ norm_csv <- norm_csv[1]
 
 
 # --------------------------------------------------------------------- #
-# ------ Step 3: Read, filter, and select the columns in FAOSTAT ------ # 
+# -------------------Step 3:Data Cleansing ----------------------------
 # --------------------------------------------------------------------- #
-crops <- data.table::fread(norm_csv, nThread = max(1, parallel::detectCores() - 1)) %>%
-  dplyr::filter(Area == "Mauritius",
-                Year >= 2000,
-                !is.na(Value)) %>%
-  dplyr::select(Area, Item, Element, Year, Value, Unit)
 
-# Check our resulting table
-# View(crops)
+tb <- data.table::fread(norm_csv, nThread = max(1, parallel::detectCores() - 1)) %>%
+  filter(!is.na(Value)) %>%                         #Filter out blank amounts
+  filter(!grepl("^'F", `Item Code (CPC)`)) %>%      #Filter out subtotals to avoid duplicated amounts
+  filter(Area=="Mauritius") %>%
+  filter(Element == "Area harvested" | Element == "Production" | Element == "Yield")%>%          #Considering Area Harvested,Production & Yield
+  group_by(Item, Year, Element) %>%
+  summarise(Value = max(Value), .groups = "drop") %>% 
+  pivot_wider(names_from=Element, values_from =Value)%>%            #Transpose data and rename columns
+  rename(Area_harvested ="Area harvested")%>% 
+  replace_na(list(Area_harvested = 0, Production = 0, Yield=0))%>%   #New blank amounts filled in as 0
+  select(Item,Year,Area_harvested,Production,Yield)
+
+# summary(tb)
+# str(tb)
+
+# --------------------------------------------------------------------- #
+# ------Step 4: Analyzing raw data for further filtering conditions -----
+# --------------------------------------------------------------------- #
+
+# Step A: Group by crops and sum on area harvested
+
+Crop_Contribution <- tb%>%group_by(Item) %>% 
+  summarise(Total_area=sum(Area_harvested))%>% 
+  arrange(desc(Total_area))
+
+total_rows <- nrow(Crop_Contribution)
+#Since there are 60 items, separate top 5 items and group remaining as 'others' for proper representation on pie chart
+# Step B: Top 5 crops
+top5 <- Crop_Contribution %>% slice_head(n = 5)
+
+# Step C: Group the rest as "Others"
+others <- Crop_Contribution %>%
+  slice_tail(n = total_rows - 5) %>%
+  summarise(Item = "Others", Total_area = sum(Total_area))
+
+# Step D: Combine into pie_data and include percentage area harvested of each crop
+pie_data <-  bind_rows(top5, others) %>%                                
+  mutate(Percentage = Total_area / sum(Total_area),
+         LegendLabel = paste0(Item, " (", percent(Percentage), ")"))
+
+# Step E: Plot Piechart to illustrate percentage area harvested for each crop
+
+ggplot(pie_data, aes(x = "", y = Total_area, fill = LegendLabel)) +
+  geom_bar(stat = "identity", width = 1) +
+  coord_polar("y") +
+  labs(title = "Harvested Area by Crop (Top 5 + Others)", fill = "Crop") +
+  theme_void()
+
+# --------------------------------------------------------------------- #
+# ---Step 5: Final criteria selection: Item-Sugarcane & year >-1981 ---
+# --------------------------------------------------------------------- #
+crops<-tb %>% 
+  filter(Item=="Sugar cane")%>%             #Based on pie chart, Sugar cane contributes most to agricultural production
+  filter(Year>=1981)                        #To align with other 3 dataset
+select(Item,Year,'Area_harvested','Production','Yield')
+
+View(crops)
 
 # Saved our results into a csv file 
 cleansed_csv_path <- file.path(dir_stage, "FAOSTAT_stage.csv")
