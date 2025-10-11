@@ -136,8 +136,8 @@ ggplot(pie_data, aes(x = "", y = Total_area, fill = LegendLabel)) +
 # --------------------------------------------------------------------- #
 crops<-tb %>% 
 filter(Item=="Sugar cane")%>%             #Based on pie chart, Sugar cane contributes most to agricultural production
-filter(Year>=1981)                        #To align with other 3 datasets
-select(Item,Year,'Area_harvested','Production','Yield')
+filter(Year>=1981) %>%                    #To align with other 3 datasets
+select('Item', 'Year', 'Area_harvested', 'Production','Yield')
 
 View(crops)
 
