@@ -14,10 +14,10 @@ source("packages_installation.R")
 library(cli)
 data_pipeline <- function() {
   cli_progress_step("Phase 1: Retrieving the FAOSTAT data")
-  source("FAOSTAT.R")
+  source("FAOSTAT_V2.R")
   cli_progress_step("Phase 2: Retrieving the NASA POWER data")
-  source("NASA.R")
+  source("NASA_V2.R")
   cli_progress_step("Phase 3: Retrieving the World Bank data.")
-  source("WB_GDP.R")
+  source("WB_GDP_V2.R")
 }
 data_pipeline()
