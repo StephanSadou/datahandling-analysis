@@ -95,8 +95,8 @@ tb <- data.table::fread(norm_csv, nThread = max(1, parallel::detectCores() - 1))
 		
 
 
-summary(tb)
-str(tb)
+# summary(tb)
+# str(tb)
 
 # --------------------------------------------------------------------- #
 # ------Step 4: Analyzing raw data for further filtering conditions ------
