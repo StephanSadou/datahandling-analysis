@@ -2,6 +2,8 @@
 library(cli)
 library(dplyr)
 library(tidyr)
+library(scales)
+library(ggplot2)
 library(FAOSTAT)
 library(data.table)
 
