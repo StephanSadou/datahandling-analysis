@@ -42,7 +42,7 @@ nasa_api_url <- sprintf(
          "latitude=%s&longitude=%s&community=AG&parameters=%s&",
          "start=%s&end=%s&format=JSON"),
   -20.3, 57.5, paste(params, collapse = ","),
-  19810101&, 20241231
+  19810101, 20241231
 )
 
 
