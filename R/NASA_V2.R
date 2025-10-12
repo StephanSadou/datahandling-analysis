@@ -80,7 +80,7 @@ nasa_df <- enframe(nasa_list, name = "variable", value = "ts") %>%
 # Currently nasa_df has 3 columns: variable (e.g. T2M), value (numeric), and date (Date)
 # The final dataframe will have one row per date with tidy climate variables
 
-final_nasa_pow <- nasa_df %>%
+final_nasa <- nasa_df %>%
   # Spread variables into separate columns
   pivot_wider(names_from = variable, values_from = value) %>%
   
@@ -91,6 +91,16 @@ final_nasa_pow <- nasa_df %>%
     Humidity_percent = RH2M,                      # Relative humidity (%)
     Solar_radiation_kWh_m2 = ALLSKY_SFC_SW_DWN    # Solar radiation (kWh/m²/day)
   )
+summary(final_nasa)
+
+realistic_val<-final_nasa %>% filter(Solar_radiation_kWh_m2>= 0)
+
+summary(realistic_val)
+
+#Replacing negative values of solar radiation by mean value : 19.62 kWh/m2
+
+final_nasa_pow <- final_nasa %>%
+  mutate(Solar_radiation_kWh_m2 = ifelse(Solar_radiation_kWh_m2 == -999, 19.62, Solar_radiation_kWh_m2))
 
 # Optional: View our results and some key statistical figures 
 # View(final_nasa_pow)
