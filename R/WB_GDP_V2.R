@@ -50,13 +50,14 @@ write.csv(wb_raw[[2]], file=file.path(dir_raw, "wb_raw.csv"),row.names=FALSE)
 wb_df <- wb_raw[[2]] |>
   select(countryiso3code, country, date, value) |>
   mutate(
-    date = as.integer(date), # keep only the year as integer
+    Year = as.integer(date), # keep only the year as integer
     #indicator.value = as.character(indicator.value),
     unit = "%",
     countryiso3code = as.character(countryiso3code),
     value = as.numeric(value)
   ) |>
-  arrange(date)
+  arrange(date) |>
+  select(countryiso3code,Year, value) 
 
 # Output the World Bank dataframe into a csv file in the same location as the script 
 write.csv(wb_df, file=file.path(dir_stage, "wb_stage_V2.csv"), row.names=FALSE)
