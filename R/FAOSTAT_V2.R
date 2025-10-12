@@ -2,10 +2,11 @@
 library(cli)
 library(dplyr)
 library(tidyr)
-library(scales)
-library(ggplot2)
 library(FAOSTAT)
 library(data.table)
+library(scales)
+library(ggplot2)
+
 
 # ----------------------------------------------------------------- #
 # ----- Step 0: Initialize the folder paths to save the files ----- # 
@@ -83,20 +84,21 @@ norm_csv <- norm_csv[1]
 # --------------------------------------------------------------------- #
 tb <- data.table::fread(norm_csv, nThread = max(1, parallel::detectCores() - 1)) %>%
              filter(!is.na(Value)) %>%                                     #Filter out blank amounts
-	       filter(!grepl("^'F", `Item Code (CPC)`)) %>%                   #Filter out subtotals to avoid duplicated amounts
-		 filter(Area=="Mauritius") %>%
+	           filter(!grepl("^'F", `Item Code (CPC)`)) %>%                   #Filter out subtotals to avoid duplicated amounts
+		         filter(Area=="Mauritius") %>%
              filter(Element == "Area harvested" | Element == "Production" | Element == "Yield")%>%          #Considering Area Harvested,Production & Yield
+             filter(Unit !="No/An") %>% 
              group_by(Item, Year, Element) %>%
-             summarise(Value = max(Value), .groups = "drop") %>% 
-		 pivot_wider(names_from=Element, values_from =Value)%>%            #Transpose data and rename columns
+             summarise(Value = sum(Value), .groups = "drop") %>% 
+		         pivot_wider(names_from=Element, values_from =Value)%>%            #Transpose data and rename columns
              rename(Area_harvested ="Area harvested")%>% 
           	 replace_na(list(Area_harvested = 0, Production = 0, Yield=0))%>%   #New blank amounts filled in as 0
              select(Item,Year,Area_harvested,Production,Yield)
 		
 
 
-# summary(tb)
-# str(tb)
+summary(tb)
+str(tb)
 
 # --------------------------------------------------------------------- #
 # ------Step 4: Analyzing raw data for further filtering conditions ------
@@ -119,6 +121,7 @@ others <- Crop_Contribution %>%
   summarise(Item = "Others", Total_area = sum(Total_area))
 
 # Step D: Combine into pie_data and include percentage area harvested of each crop
+
 pie_data <-  bind_rows(top5, others) %>%                                
   mutate(Percentage = Total_area / sum(Total_area),
          LegendLabel = paste0(Item, " (", percent(Percentage), ")"))
@@ -136,8 +139,8 @@ ggplot(pie_data, aes(x = "", y = Total_area, fill = LegendLabel)) +
 # --------------------------------------------------------------------- #
 crops<-tb %>% 
 filter(Item=="Sugar cane")%>%             #Based on pie chart, Sugar cane contributes most to agricultural production
-filter(Year>=1981) %>%                    #To align with other 3 datasets
-select('Item', 'Year', 'Area_harvested', 'Production','Yield')
+filter(Year>=1981) %>%                         #To align with other 3 datasets
+select(Item,Year,Area_harvested,Production,Yield)
 
 View(crops)
 
