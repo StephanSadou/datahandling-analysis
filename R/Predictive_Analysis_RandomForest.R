@@ -23,25 +23,19 @@ dir_stage <- file.path(root_dir, "data_stage")
 faostat_df <- read.csv(file.path(dir_stage, "FAOSTAT_stageV2.csv")) %>% arrange(Year)
 nasa_df <- read.csv(file.path(dir_stage, "NASA_Dataprep.csv"))
 
-combined_df <- merge(nasa_df, faostat_df, by.x='agri_year', by.y='Year')  
+combined_df <- merge(nasa_df, faostat_df, by='Year')  
 combined_df <- subset(combined_df, select = -c(Item, Production))
 
-# Create Year column and drop the agri_year column 
-combined_df <- combined_df %>%
-  mutate(Year = dplyr::coalesce(.data[["agri_year"]])) %>%
-  arrange(Year)
-combined_df <- subset(combined_df, select = -c(agri_year))
-
-target   <- "Yield"
-area_col <- "Area_harvested"
+target <- "Yield"
+area_col <- "Area_harvested" 
 
 # climate features (incl. rainy days & harvest/phase metrics)
 climate_cols <- c(
   "Avg_Humidity_Maturation","Avg_Humidity_Growth","Avg_Humidity_Plantation",
-  "Avg_Solar_Radiation_Maturation","Avg_Solar_Radiation_Growth","Avg_Solar_Radiation_Plantation",
+  "Avg_SolarRadiation_Maturation","Avg_SolarRadiation_Growth","Avg_SolarRadiation_Plantation",
   "Avg_Temperature_Maturation","Avg_Temperature_Growth","Avg_Temperature_Plantation",
   "Total_Rainfall_Maturation","Total_Rainfall_Growth","Total_Rainfall_Plantation",
-  "Total_Rainy_days_Maturation","Total_Rainy_days_Growth","Total_Rainy_days_Plantation"
+  "Total_Rainyday_Maturation","Total_Rainyday_Growth","Total_Rainyday_Plantation"
 )
 
 # ---------- 1) Chronological 70/30 split ----------
