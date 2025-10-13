@@ -15,79 +15,56 @@ root_dir <- normalizePath(file.path(current_dir, ".."))
 dir_raw   <- file.path(root_dir, "data_raw")
 dir_stage <- file.path(root_dir, "data_stage")
   
-# ---- Load ----
-df <- read_csv(file.path(dir_stage, "nasa_stage_V2.csv"), show_col_types = FALSE) %>%
+
+# NASA: Creating seasonal classification for: 
+# Plantation (Jul - Sep)
+# Growth (Oct - Mar)
+# Maturation (Apr - Jun)
+# Harvest (Jul - Dec)
+
+nasa_df <- read_csv(file.path(dir_stage, "nasa_stage_V2.csv"), show_col_types = FALSE) %>%
+  rename(
+    Date = date,
+    Temperature = Temperature_in_degree_celsius, 
+    Rainfall = Precipitation_in_mm, 
+    Humidity = Humidity_percent, 
+    SolarRadiation = Solar_radiation_kWh_m2
+  ) %>% 
   mutate(
-    date  = as_date(date),
-    year  = year(date),
-    month = month(date)
+    Date = as_date(Date),
+    Year  = year(Date),
+    Month = month(Date),
+    Season = case_when(
+      Month %in% c(7, 8, 9) ~ "Plantation",      
+      Month %in% c(10, 11, 12, 1, 2, 3) ~ "Growth",   
+      Month %in% c(4, 5, 6) ~ "Maturation",   
+    ),
+    Rainyday = as.integer(Rainfall >= 1), 
+    Harvest = ifelse(Month %in% 7:12, 1 , 0) # Harvest flag
   ) %>%
-  filter(!is.na(date))
+  select(Year, Month, Season, Harvest, Temperature, Rainfall, Rainyday, Humidity, SolarRadiation)
 
-# ---- Agri year (July -> June) & Phases ----
-# agri_year Y: 1 Jul Y .. 30 Jun Y+1
-df <- df %>%
-  mutate(
-    agri_year = if_else(month >= 7, year, year - 1L),
-    phase = case_when(
-      month %in% 1:3 ~ "Harvest",      # Jan–Mar
-      month %in% 4:6 ~ "Maturation",   # Apr–Jun
-      month %in% 7:9 ~ "Plantation",   # Jul–Sep
-      month %in% 10:12 ~ "Growth"      # Oct–Mar
-    )
-  ) 
+View(nasa_df)
 
-# Rainy days 
-df <- df %>% mutate(rainy_day = as.integer(Precipitation_in_mm >= 1))
-
-# ---- Aggregate (by agri_year, phase) with YOUR rules ----
-# Temperature_in_degree_celsius -> SUM
-# Precipitation_in_mm           -> SUM
-# Humidity_percent              -> MEAN
-# Solar_radiation_kWh_m2        -> MEAN
-# Rainy days                    -> SUM 
-phase_summ <- df %>%
-  group_by(agri_year, phase) %>%
+# Aggregate climate data by year and Season 
+nasa_annual <- nasa_df %>% 
+  group_by(Year, Season) %>%
   summarise(
-    Avg_Humidity        = mean(Humidity_percent, na.rm = TRUE),
-    Avg_Solar_Radiation = mean(Solar_radiation_kWh_m2, na.rm = TRUE),
-    Avg_Temperature     = sum(Temperature_in_degree_celsius, na.rm = TRUE),  
-    Total_Rainfall      = sum(Precipitation_in_mm, na.rm = TRUE),
-    Total_Rainy_days    = sum(rainy_day, na.rm = TRUE),
+    Total_Rainfall = sum(Rainfall, na.rm = TRUE), 
+    Avg_Temperature = mean(Temperature, na.rm = TRUE),
+    Avg_Humidity = mean(Humidity, na.rm = TRUE), 
+    Avg_SolarRadiation = mean(SolarRadiation, na.rm = TRUE), 
+    Total_Rainyday = sum(Rainyday, na.rm = TRUE),
     .groups = "drop"
+  ) %>% 
+  pivot_wider(
+    names_from = Season, 
+    values_from = c(Total_Rainfall, Avg_Temperature, Avg_Humidity, Avg_SolarRadiation, Total_Rainyday),
+    names_sep = "_"
   )
 
-# ---- Pivot to requested wide columns ----
-nasa_phase_yearly <- phase_summ %>%
-  tidyr::pivot_wider(
-    names_from  = phase,
-    values_from = c(Avg_Humidity, Avg_Solar_Radiation, Avg_Temperature, Total_Rainfall, Total_Rainy_days),
-    names_sep   = "_"
-  ) %>%
-  arrange(agri_year)
-
-# ---- Keep exactly the columns you asked for (Plantation/Growth/Maturation only) ----
-keep_cols <- c(
-  "agri_year",
-  "Avg_Humidity_Maturation","Avg_Humidity_Growth","Avg_Humidity_Plantation",
-  "Avg_Solar_Radiation_Maturation","Avg_Solar_Radiation_Growth","Avg_Solar_Radiation_Plantation",
-  "Avg_Temperature_Maturation","Avg_Temperature_Growth","Avg_Temperature_Plantation",
-  "Total_Rainfall_Maturation","Total_Rainfall_Growth","Total_Rainfall_Plantation",
-  "Total_Rainy_days_Maturation","Total_Rainy_days_Growth","Total_Rainy_days_Plantation"
-)
-
-# Ensure stable schema even if a phase is missing for a year
-for (cc in setdiff(keep_cols, names(nasa_phase_yearly))) {
-  nasa_phase_yearly[[cc]] <- NA_real_
-}
-
-nasa_phase_yearly <- nasa_phase_yearly %>% select(any_of(keep_cols))
-
-# ---- (Optional) Write to disk ----
-# readr::write_csv(nasa_phase_yearly, "nasa_phase_yearly.csv")
-
 # ---- Preview ----
-print(head(nasa_phase_yearly, 10))
+print(head(nasa_annual, 10))
 
 csv_path <- file.path(dir_stage, "NASA_Dataprep.csv")
-write.csv(nasa_phase_yearly, file=csv_path, row.names=FALSE)
+write.csv(nasa_annual, file=csv_path, row.names=FALSE)
