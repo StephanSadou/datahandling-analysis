@@ -95,6 +95,6 @@ JOIN (
 ) cl
 ON ag.Year = cl.Climate_Year  # Align climate from current year with current harvest year
 JOIN economic_indicator ei 
-ON ei.Year = ag.Year;
+ON ei.Year = ag.Ycurrent_compiled_datacurrent_compiled_dataear;
 
 select count(*) From current_compiled_data #:- Crosscheck linecount:- should be same as FAOSTAT Data
