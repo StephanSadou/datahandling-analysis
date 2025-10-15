@@ -21,7 +21,9 @@ CREATE TABLE climate (
 
 CREATE TABLE economic_indicator(
     Year YEAR NOT NULL ,    
-    Country_Iso_Code VARCHAR(10) NOT NULL ,
+    Countryiso3code VARCHAR(10) NOT NULL ,
     value DECIMAL(12,4) NOT NULL CHECK (value >= 0),  -- indicator value
-	PRIMARY KEY (Year, Country_Iso_Code)
+	PRIMARY KEY (Year, Countryiso3code)
 );
+
+#select count(*) from climate
