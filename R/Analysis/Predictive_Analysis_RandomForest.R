@@ -1,115 +1,182 @@
 # ===== Random Forest (ranger) for Sugarcane Yield using combined_df =====
 
+library(gt)
+library(DBI)
 library(dplyr)
+library(readr)
 library(tidyr)
+library(ranger)
+library(Metrics)
 library(ggplot2)
-library(ranger)   # fast RF with permutation importance
+library(RMariaDB)
+library(rprojroot)
+library(lubridate)
 
-# Call function from another R script to get current working directory 
-source("get_cwd.R")
-current_dir <- get_script_dir()
+# -------------------------------------------------------- #
+# ----- Step 1: Connect to the database to read view ----- # 
+# -------------------------------------------------------- #
 
-# From the R script, move to the root folder where all the other folders are present 
-root_dir <- normalizePath(file.path(current_dir, ".."))
+# Read the environment file to obtain the database credentials 
+root <- find_root(has_file(".Renviron"))
+readRenviron(file.path(root, ".Renviron"))
 
-# Assign folder for raw and cleansed data
-dir_raw   <- file.path(root_dir, "data_raw")
-dir_stage <- file.path(root_dir, "data_stage")
-
-
-# ---------- 0) Prepare data ----------
-
-# Read the FAOSTAT file and the NASA data preparation dataset 
-faostat_df <- read.csv(file.path(dir_stage, "FAOSTAT_stageV2.csv")) %>% arrange(Year)
-nasa_df <- read.csv(file.path(dir_stage, "NASA_Dataprep.csv"))
-
-combined_df <- merge(nasa_df, faostat_df, by='Year')  
-combined_df <- subset(combined_df, select = -c(Item, Production))
-
-target <- "Yield"
-area_col <- "Area_harvested" 
-
-# climate features (incl. rainy days & harvest/phase metrics)
-climate_cols <- c(
-  "Avg_Humidity_Maturation","Avg_Humidity_Growth","Avg_Humidity_Plantation",
-  "Avg_SolarRadiation_Maturation","Avg_SolarRadiation_Growth","Avg_SolarRadiation_Plantation",
-  "Avg_Temperature_Maturation","Avg_Temperature_Growth","Avg_Temperature_Plantation",
-  "Total_Rainfall_Maturation","Total_Rainfall_Growth","Total_Rainfall_Plantation",
-  "Total_Rainyday_Maturation","Total_Rainyday_Growth","Total_Rainyday_Plantation"
+# Use the credentials to connect to our local database 
+con <- dbConnect(
+  RMariaDB::MariaDB(),
+  dbname = Sys.getenv("DB_NAME"),
+  host = Sys.getenv("DB_HOST"),
+  user = Sys.getenv("DB_USER"),
+  password = Sys.getenv("DB_PASSWORD")
 )
 
-# ---------- 1) Chronological 70/30 split ----------
-n_total   <- nrow(combined_df)
-split_idx <- floor(0.7 * n_total); stopifnot(split_idx >= 1, split_idx < n_total)
+# Use connection to connect to the combined view for FAOSTAT datasets
+compiled_data <- dbReadTable(con, "current_compiled_data")
+compiledlagged_data <- dbReadTable(con, "lagged_compiled_data")
 
-train <- combined_df[seq_len(split_idx), , drop = FALSE]
-test  <- combined_df[(split_idx + 1):n_total, , drop = FALSE]
-split_year <- train$Year[split_idx]
+# Close connection to database 
+dbDisconnect(con)
 
-# ---------- 2) Metrics ----------
-rmse <- function(a, p) sqrt(mean((a - p)^2, na.rm = TRUE))
-mae  <- function(a, p) mean(abs(a - p), na.rm = TRUE)
-r2   <- function(a, p) 1 - sum((a - p)^2, na.rm = TRUE) / sum((a - mean(a, na.rm = TRUE))^2, na.rm = TRUE)
+# -------------------------------------------------------- #
+# ----- Step 2: Feature Engineering & Selection ---------- # 
+# -------------------------------------------------------- #
 
-# Prepare model frames (drop rows with NA only where required)
-needed_A <- c(target, climate_cols)
-train_A  <- train %>% drop_na(all_of(needed_A))
-test_A   <- test  %>% drop_na(all_of(needed_A))
+# We are trying to predict Yield --> yield is the dependent variables 
+# The other factors that we are using to predict yield --> independent variables (features)
 
-needed_B <- c(target, climate_cols, area_col)
-train_B  <- train %>% drop_na(all_of(needed_B))
-test_B   <- test  %>% drop_na(all_of(needed_B))
+target <- "Yield"
+predictors <- c("Avg_Temperature_Plantation", "Avg_Temperature_Growth", 
+                "Avg_Temperature_Maturation", "Total_Rainfall_Plantation", 
+                "Total_Rainfall_Growth", "Total_Rainfall_Maturation",
+                "Total_rainy_days_Plantation", "Total_rainy_days_Growth", 
+                "Total_rainy_days_Maturation")
 
-# ---------- 3) MODEL A — Climate-only RF ----------
-form_A <- reformulate(termlabels = climate_cols, response = target)
+# Fields in compiled lagged data is different 
+predictors_lagged <- c("Avg_Temperature_Plantation_lag1", "Avg_Temperature_Growth_lag1", 
+                       "Avg_Temperature_Maturation_lag1", "Total_Rainfall_Plantation_lag1", 
+                       "Total_Rainfall_Growth_lag1", "Total_Rainfall_Maturation_lag1",
+                       "Total_rainy_days_Plantation_lag1", "Total_rainy_days_Growth_lag1", 
+                       "Total_rainy_days_Maturation_lag1")
+
+# Select only the column that interest us in our predictive model 
+# We select the same columns from both the compiled and the compiled lagged data
+compiled_data <- compiled_data %>% select(c("Harvest_Year", predictors, target))
+compiledlagged_data <- compiledlagged_data %>% select(c("Harvest_Year", predictors_lagged, target))
+
+# -------------------------------------------------------- #
+# -------- Step 3: Data Splitting (Train/Test) ----------- # 
+# -------------------------------------------------------- #
+
+# Performing a chronological split of the data
+# 70% will be used for training & 30% will be used for testing 
+n_total   <- nrow(compiled_data)
+split_idx <- floor(0.7 * n_total)
+stopifnot(split_idx >= 1, split_idx < n_total)
+
+# We do the splitting for (A) Compiled data & (B) Compiled Lagged data 
+train_A <- compiled_data[seq_len(split_idx), , drop = FALSE]
+test_A  <- compiled_data[(split_idx + 1):n_total, , drop = FALSE]
+
+train_B <- compiledlagged_data[seq_len(split_idx), , drop = FALSE]
+test_B  <- compiledlagged_data[(split_idx + 1):n_total, , drop = FALSE]
+split_year <- train_A$Year[split_idx]
+
+
+# Define Metrics for Model Evaluation 
+
+# R2 coefficient 
+r2 <- function(obs, pred) 1 - sum((obs - pred)^2)/sum((obs - mean(obs))^2)
+
+# Using the metrics library we will be evaluating the RMSE, MAE, MSE & MAPE 
+metrics_tbl <- function(obs, pred) {
+  data.frame(
+    R2   = r2(obs, pred), 
+    RMSE = rmse(obs, pred),
+    MAE  = mae(obs, pred),
+    MSE  = mse(obs, pred),
+    MAPE = mape(obs, pred) * 100 
+  )
+}
+
+# -------------------------------------------------------- #
+# ------------- Step 4: Models Definitions --------------- # 
+# -------------------------------------------------------- #
+
+# Model A --> Model A is the compiled data only 
+# Model B --> Model B is the compiled lagged data 
+
+# Drop rows with NA in the columns needed for each model (separately for train/test)
+
+train_A  <- train_A %>% tidyr::drop_na(dplyr::all_of(c(predictors, target))) 
+test_A   <- test_A  %>% tidyr::drop_na(dplyr::all_of(c(predictors, target)))
+
+train_B  <- train_B %>% tidyr::drop_na(dplyr::all_of(c(predictors_lagged, target)))
+test_B   <- test_B  %>% tidyr::drop_na(dplyr::all_of(c(predictors_lagged, target)))
+
+
+
+# ----------------------------------------------------------------------- #
+# --------------- Step 5: Random Forest Models Training ----------------- # 
+# ----------------------------------------------------------------------- #
+
+#  MODEL A — Compiled data only 
+form_A <- reformulate(termlabels = predictors, response = target)
 
 fit_A <- ranger(
   formula         = form_A,
   data            = train_A,
   num.trees       = 1000,
-  mtry            = max(1, floor(sqrt(length(climate_cols)))),
-  min.node.size   = 5,
+  mtry            = max(1, floor(sqrt(length(predictors)))),
+  min.node.size   = 3,
   importance      = "permutation",   # safe even if not used later
   respect.unordered.factors = "order",
   seed            = 42
 )
 
-pred_A_tr <- predict(fit_A, data = train_A)$predictions
-pred_A_te <- predict(fit_A, data = test_A)$predictions
-y_tr_A    <- train_A[[target]]
-y_te_A    <- test_A[[target]]
-
-cat("\n=== MODEL A (Climate-only) — Random Forest ===\n")
-cat(sprintf("Train  -> R²: %.3f | RMSE: %0.0f | MAE: %0.0f\n",
-            r2(y_tr_A, pred_A_tr), rmse(y_tr_A, pred_A_tr), mae(y_tr_A, pred_A_tr)))
-cat(sprintf("Test   -> R²: %.3f | RMSE: %0.0f | MAE: %0.0f\n",
-            r2(y_te_A, pred_A_te), rmse(y_te_A, pred_A_te), mae(y_te_A, pred_A_te)))
-
-# ---------- 4) MODEL B — Climate + Area RF ----------
-terms_B <- c(climate_cols, area_col)
-form_B  <- reformulate(termlabels = terms_B, response = target)
-
+# MODEL B — Compiled lagged data 
+form_B  <- reformulate(termlabels = predictors_lagged, response = target)
 fit_B <- ranger(
   formula         = form_B,
   data            = train_B,
   num.trees       = 1000,
-  mtry            = max(1, floor(sqrt(length(terms_B)))),
+  mtry            = max(1, floor(sqrt(length(predictors_lagged)))),
   min.node.size   = 5,
   importance      = "permutation",
   respect.unordered.factors = "order",
   seed            = 42
 )
 
-pred_B_tr <- predict(fit_B, data = train_B)$predictions
-pred_B_te <- predict(fit_B, data = test_B)$predictions
-y_tr_B    <- train_B[[target]]
-y_te_B    <- test_B[[target]]
+# ----------------------------------------------------------------------- #
+# -------------- Step 5: Prediction & Models Evaluation ----------------- # 
+# ----------------------------------------------------------------------- #
 
-cat("\n=== MODEL B (Climate + Area) — Random Forest ===\n")
-cat(sprintf("Train  -> R²: %.3f | RMSE: %0.0f | MAE: %0.0f\n",
-            r2(y_tr_B, pred_B_tr), rmse(y_tr_B, pred_B_tr), mae(y_tr_B, pred_B_tr)))
-cat(sprintf("Test   -> R²: %.3f | RMSE: %0.0f | MAE: %0.0f\n",
-            r2(y_te_B, pred_B_te), rmse(y_te_B, pred_B_te), mae(y_te_B, pred_B_te)))
+# Using the fitted Model A to predict on training data & then on testing data 
+ModelA_training_values <- train_A[[target]]
+ModelA_testing_values <- test_A[[target]]
+ModelA_training_predictions <- predict(fit_A, newdata = train_A)
+ModelA_testing_predictions <- predict(fit_A, newdata = test_A)
+
+# Using the fitted Model B to predict on training data & then on testing data 
+ModelB_training_values <- train_B[[target]]
+ModelB_testing_values <- test_B[[target]]
+ModelB_training_predictions <- predict(fit_B, newdata = train_B)$predictions
+ModelB_testing_predictions <- predict(fit_B, newdata = test_B)$predictions
+
+cat("\n=== MODEL A (Climate-only) — OLS summary ===\n")
+print(summary(fit_A))
+
+rbind(
+  cbind(Set = "Train", metrics_tbl(ModelA_training_values, ModelA_training_predictions)),
+  cbind(Set = "Test",  metrics_tbl(ModelA_testing_values,  ModelA_testing_predictions))
+)
+
+
+cat("\n=== MODEL B (Climate + Area) — OLS summary ===\n")
+print(summary(fit_B))
+
+rbind(
+  cbind(Set = "Train", metrics_tbl(ModelB_training_values, ModelB_training_predictions)),
+  cbind(Set = "Test",  metrics_tbl(ModelB_testing_values,  ModelB_testing_predictions))
+)
 
 # ---------- 5) Full-series predictions for plotting ----------
 # Predict where predictors exist (keep NA where we can't predict)

@@ -1,148 +1,177 @@
 # ===== Baseline GLM (OLS) for Sugarcane Production =====
 
+library(gt)
+library(DBI)
 library(dplyr)
-library(ggplot2)
 library(readr)
-library(dplyr)
+library(Metrics)
+library(ggplot2)
+library(RMariaDB)
+library(rprojroot)
 library(lubridate)
 
+# -------------------------------------------------------- #
+# ----- Step 1: Connect to the database to read view ----- # 
+# -------------------------------------------------------- #
 
-# Call function from another R script to get current working directory 
-source("get_cwd.R")
-current_dir <- get_script_dir()
+# Read the environment file to obtain the database credentials 
+root <- find_root(has_file(".Renviron"))
+readRenviron(file.path(root, ".Renviron"))
 
-# From the R script, move to the root folder where all the other folders are present 
-root_dir <- normalizePath(file.path(current_dir, ".."))
-
-# Assign folder for raw and cleansed data
-dir_raw   <- file.path(root_dir, "data_raw")
-dir_stage <- file.path(root_dir, "data_stage")
-
-
-# Read the FAOSTAT file and the NASA data preparation dataset 
-faostat_df <- read.csv(file.path(dir_stage, "FAOSTAT_stageV2.csv")) %>% arrange(Year)
-nasa_df <- read.csv(file.path(dir_stage, "NASA_Dataprep.csv"))
-
-combined_df <- merge(nasa_df, faostat_df, by='Year')  
-combined_df <- subset(combined_df, select = -c(Item, Production))
-
-target <- "Yield"
-area_col <- "Area_harvested" 
-
-# All climate columns except the harvest period 
-# Area Harvested, Year and Yield omitted 
-climate_cols <- c(
-  "Avg_Humidity_Maturation","Avg_Humidity_Growth","Avg_Humidity_Plantation",
-  "Avg_SolarRadiation_Maturation","Avg_SolarRadiation_Growth","Avg_SolarRadiation_Plantation",
-  "Avg_Temperature_Maturation","Avg_Temperature_Growth","Avg_Temperature_Plantation",
-  "Total_Rainfall_Maturation","Total_Rainfall_Growth","Total_Rainfall_Plantation",
-  "Total_Rainyday_Maturation","Total_Rainyday_Growth","Total_Rainyday_Plantation"
+# Use the credentials to connect to our local database 
+con <- dbConnect(
+  RMariaDB::MariaDB(),
+  dbname = Sys.getenv("DB_NAME"),
+  host = Sys.getenv("DB_HOST"),
+  user = Sys.getenv("DB_USER"),
+  password = Sys.getenv("DB_PASSWORD")
 )
 
-# 2) Time-aware split (last 5 years = test)
-# ---------- 2) Chronological split: 70% train / 30% test ----------
-n_total   <- nrow(combined_df)
+# Use connection to connect to the combined view for FAOSTAT datasets
+compiled_data <- dbReadTable(con, "current_compiled_data")
+compiledlagged_data <- dbReadTable(con, "lagged_compiled_data")
+
+# Close connection to database 
+dbDisconnect(con)
+
+# -------------------------------------------------------- #
+# ----- Step 2: Feature Engineering & Selection ---------- # 
+# -------------------------------------------------------- #
+
+# We are trying to predict Yield --> yield is the dependent variables 
+# The other factors that we are using to predict yield --> independent variables (features)
+
+target <- "Yield"
+predictors <- c("Avg_Temperature_Plantation", "Avg_Temperature_Growth", 
+                "Avg_Temperature_Maturation", "Total_Rainfall_Plantation", 
+                "Total_Rainfall_Growth", "Total_Rainfall_Maturation",
+                "Total_rainy_days_Plantation", "Total_rainy_days_Growth", 
+                "Total_rainy_days_Maturation")
+
+# Fields in compiled lagged data is different 
+predictors_lagged <- c("Avg_Temperature_Plantation_lag1", "Avg_Temperature_Growth_lag1", 
+                "Avg_Temperature_Maturation_lag1", "Total_Rainfall_Plantation_lag1", 
+                "Total_Rainfall_Growth_lag1", "Total_Rainfall_Maturation_lag1",
+                "Total_rainy_days_Plantation_lag1", "Total_rainy_days_Growth_lag1", 
+                "Total_rainy_days_Maturation_lag1")
+
+# Select only the column that interest us in our predictive model 
+# We select the same columns from both the compiled and the compiled lagged data
+compiled_data <- compiled_data %>% select(c("Harvest_Year", predictors, target))
+compiledlagged_data <- compiledlagged_data %>% select(c("Harvest_Year", predictors_lagged, target))
+
+# -------------------------------------------------------- #
+# -------- Step 3: Data Splitting (Train/Test) ----------- # 
+# -------------------------------------------------------- #
+
+# Performing a chronological split of the data
+# 70% will be used for training & 30% will be used for testing 
+n_total   <- nrow(compiled_data)
 split_idx <- floor(0.7 * n_total)
 stopifnot(split_idx >= 1, split_idx < n_total)
 
-train <- combined_df[seq_len(split_idx), , drop = FALSE]
-test  <- combined_df[(split_idx + 1):n_total, , drop = FALSE]
-split_year <- train$Year[split_idx]
+# We do the splitting for (A) Compiled data & (B) Compiled Lagged data 
+train_A <- compiled_data[seq_len(split_idx), , drop = FALSE]
+test_A  <- compiled_data[(split_idx + 1):n_total, , drop = FALSE]
 
-# ---------- 3) Metrics ----------
-rmse <- function(a, p) sqrt(mean((a - p)^2, na.rm = TRUE))
-mae  <- function(a, p) mean(abs(a - p), na.rm = TRUE)
-r2   <- function(a, p) 1 - sum((a - p)^2, na.rm = TRUE) / sum((a - mean(a, na.rm = TRUE))^2, na.rm = TRUE)
+train_B <- compiledlagged_data[seq_len(split_idx), , drop = FALSE]
+test_B  <- compiledlagged_data[(split_idx + 1):n_total, , drop = FALSE]
+split_year <- train_A$Year[split_idx]
 
+
+# Define Metrics for Model Evaluation 
+
+# R2 coefficient 
+r2 <- function(obs, pred) 1 - sum((obs - pred)^2)/sum((obs - mean(obs))^2)
+
+# Using the metrics library we will be evaluating the RMSE, MAE, MSE & MAPE 
+metrics_tbl <- function(obs, pred) {
+  data.frame(
+    R2   = r2(obs, pred), 
+    RMSE = rmse(obs, pred),
+    MAE  = mae(obs, pred),
+    MSE  = mse(obs, pred),
+    MAPE = mape(obs, pred) * 100 
+  )
+}
+
+
+# -------------------------------------------------------- #
+# ------------- Step 4: Models Definitions --------------- # 
+# -------------------------------------------------------- #
+
+# Model A --> Model A is the compiled data only 
+# Model B --> Model B is the compiled lagged data 
 
 # Drop rows with NA in the columns needed for each model (separately for train/test)
-needed_A <- c(target, climate_cols)
-train_A  <- train %>% tidyr::drop_na(dplyr::all_of(needed_A))
-test_A   <- test  %>% tidyr::drop_na(dplyr::all_of(needed_A))
 
-needed_B <- c(target, climate_cols, area_col)
-train_B  <- train %>% tidyr::drop_na(dplyr::all_of(needed_B))
-test_B   <- test  %>% tidyr::drop_na(dplyr::all_of(needed_B))
+train_A  <- train_A %>% tidyr::drop_na(dplyr::all_of(c(predictors, target)))
+test_A   <- test_A  %>% tidyr::drop_na(dplyr::all_of(c(predictors, target)))
 
-# ---------- 4) MODEL A — Climate-only ----------
-form_A <- reformulate(termlabels = climate_cols, response = target)
+train_B  <- train_B %>% tidyr::drop_na(dplyr::all_of(c(predictors_lagged, target)))
+test_B   <- test_B  %>% tidyr::drop_na(dplyr::all_of(c(predictors_lagged, target)))
+
+
+# -------------------------------------------------------- #
+# -------------- Step 4: Models Training ----------------- # 
+# -------------------------------------------------------- #
+
+# MODEL A — Compiled data only 
+form_A <- reformulate(termlabels = predictors, response = target)
 fit_A  <- lm(form_A, data = train_A)
+
+# MODEL B — Compiled lagged data 
+form_B <- reformulate(termlabels = predictors_lagged, response = target)
+fit_B  <- lm(form_B, data = train_B)
+
+
+# ----------------------------------------------------------------------- #
+# -------------- Step 5: Prediction & Models Evaluation ----------------- # 
+# ----------------------------------------------------------------------- #
+
+# Using the fitted Model A to predict on training data & then on testing data 
+ModelA_training_values <- train_A[[target]]
+ModelA_testing_values <- test_A[[target]]
+ModelA_training_predictions <- predict(fit_A, newdata = train_A)
+ModelA_testing_predictions <- predict(fit_A, newdata = test_A)
+
+# Using the fitted Model B to predict on training data & then on testing data 
+ModelB_training_values <- train_B[[target]]
+ModelB_testing_values <- test_B[[target]]
+ModelB_training_predictions <- predict(fit_B, newdata = train_B)
+ModelB_testing_predictions <- predict(fit_B, newdata = test_B)
 
 cat("\n=== MODEL A (Climate-only) — OLS summary ===\n")
 print(summary(fit_A))
 
-pred_A_tr <- predict(fit_A, newdata = train_A)
-pred_A_te <- predict(fit_A, newdata = test_A)
-y_tr_A <- train_A[[target]]
-y_te_A <- test_A[[target]]
+rbind(
+  cbind(Set = "Train", metrics_tbl(ModelA_training_values, ModelA_training_predictions)),
+  cbind(Set = "Test",  metrics_tbl(ModelA_testing_values,  ModelA_testing_predictions))
+)
 
-cat("\nMODEL A — Train:\n")
-cat(sprintf("R²: %.3f | RMSE: %0.0f | MAE: %0.0f\n",
-            r2(y_tr_A, pred_A_tr), rmse(y_tr_A, pred_A_tr), mae(y_tr_A, pred_A_tr)))
-cat("MODEL A — Test (30% last years):\n")
-cat(sprintf("R²: %.3f | RMSE: %0.0f | MAE: %0.0f\n",
-            r2(y_te_A, pred_A_te), rmse(y_te_A, pred_A_te), mae(y_te_A, pred_A_te)))
-
-# ---------- 5) MODEL B — Climate + Area harvested ----------
-terms_B <- c(climate_cols, area_col)
-
-# reformulate() builds a safe formula even if column names have spaces/symbols
-form_B <- reformulate(termlabels = terms_B, response = target)
-fit_B  <- lm(form_B, data = train_B)
 
 cat("\n=== MODEL B (Climate + Area) — OLS summary ===\n")
 print(summary(fit_B))
 
-pred_B_tr <- predict(fit_B, newdata = train_B)
-pred_B_te <- predict(fit_B, newdata = test_B)
-y_tr_B    <- train_B[[target]]
-y_te_B    <- test_B[[target]]
-
-cat("\nMODEL B — Train:\n")
-cat(sprintf("R²: %.3f | RMSE: %0.0f | MAE: %0.0f\n",
-            r2(y_tr_B, pred_B_tr), rmse(y_tr_B, pred_B_tr), mae(y_tr_B, pred_B_tr)))
-cat("MODEL B — Test (30% last years):\n")
-cat(sprintf("R²: %.3f | RMSE: %0.0f | MAE: %0.0f\n",
-            r2(y_te_B, pred_B_te), rmse(y_te_B, pred_B_te), mae(y_te_B, pred_B_te)))
-
-
+rbind(
+  cbind(Set = "Train", metrics_tbl(ModelB_training_values, ModelB_training_predictions)),
+  cbind(Set = "Test",  metrics_tbl(ModelB_testing_values,  ModelB_testing_predictions))
+)
 
 # ---------- 6) Full-series predictions (for plotting) ----------
 # For plotting we predict over the whole df. For each model we must drop rows with missing predictors.
-df_A_ready <- combined_df %>% tidyr::drop_na(dplyr::all_of(climate_cols))
-df_B_ready <- combined_df %>% tidyr::drop_na(dplyr::all_of(c(climate_cols, area_col)))
 
-df_plot <- combined_df %>%
-  transmute(Year = Year,
-            y_true = !!rlang::sym(target)) %>%
+# First we take all the data for Model A & B
+modelA_df <- compiled_data %>% tidyr::drop_na(dplyr::all_of(c(predictors, target)))
+modelB_df <- compiledlagged_data %>% tidyr::drop_na(dplyr::all_of(c(predictors_lagged, target)))
+
+
+# Joining the model A and model B predicted values together to plot 
+df_plot <- compiled_data %>% select(Harvest_Year, Yield) %>% 
+  left_join(modelA_df %>% mutate(pred_A = as.numeric(predict(fit_A, newdata = df_A_ready))) %>% select(Harvest_Year, pred_A),
+            by = "Harvest_Year") %>% 
   left_join(
-    df_A_ready %>% mutate(pred_A = as.numeric(predict(fit_A, newdata = df_A_ready))) %>% select(Year, pred_A),
-    by = "Year"
-  ) %>%
-  left_join(
-    df_B_ready %>% mutate(pred_B = as.numeric(predict(fit_B, newdata = df_B_ready))) %>% select(Year, pred_B),
-    by = "Year"
+    modelB_df %>% mutate(pred_B = as.numeric(predict(fit_B, newdata = df_B_ready))) %>% select(Harvest_Year, pred_B),
+    by = "Harvest_Year"
   )
 
-y_max <- max(df_plot$y_true, na.rm = TRUE)
-
-ggplot() +
-  annotate("rect", xmin = split_year, xmax = Inf, ymin = -Inf, ymax = Inf, alpha = 0.15) +
-  geom_vline(xintercept = split_year, linetype = "dotted") +
-  geom_line(data = df_plot, aes(Year, y_true, color = "Observed"), linewidth = 1) +
-  geom_line(data = df_plot, aes(Year, pred_A, color = "GLM A (Climate-only)"),
-            linewidth = 1, linetype = "dashed", na.rm = TRUE) +
-  geom_line(data = df_plot, aes(Year, pred_B, color = "GLM B (Climate + Area)"),
-            linewidth = 1, linetype = "dashed", na.rm = TRUE) +
-  annotate("text", x = split_year - 0.5, y = y_max, label = "TRAIN", vjust = -0.3, size = 3.5) +
-  annotate("text", x = split_year + 0.5, y = y_max, label = "TEST",  vjust = -0.3, size = 3.5) +
-  scale_color_manual(values = c("Observed" = "black",
-                                "GLM A (Climate-only)"   = "#1b9e77",
-                                "GLM B (Climate + Area)" = "#d95f02")) +
-  labs(
-    title = "Sugarcane Production — GLM Predictions vs Observed",
-    subtitle = "70% Train (left) / 30% Test (right) — split is vertical line & shaded area",
-    x = "Year", y = "Yield", color = NULL
-  ) +
-  theme_minimal(base_size = 12) +
-  theme(legend.position = "bottom")
