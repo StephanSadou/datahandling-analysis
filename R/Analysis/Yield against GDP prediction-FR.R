@@ -19,7 +19,7 @@ library(forecast)
 
 #Sourcing explanatory script to refer to the model data frame
 
-source("Predictive ARIMA_YIELD VS GDP_FR.R")
+source("Updated Explanatory code.R")
 
 
 #1 Create time-series dataset based on real yield values
@@ -141,7 +141,7 @@ future_forecast <- forecast(final_arimax_model, xreg = future_xreg, h = 7)
 autoplot(future_forecast) + ggtitle("ARIMAX Forecast of Sugarcane Yield")
 
 
-# 11.  Calculate future GDP impact
+#11 Calculate future GDP impact based on predicted values
 
 baseline_yield <- mean(model_df$Yield_Value, na.rm = TRUE)
 avg_agri_share <- mean(model_df$Agri_GDP_Share, na.rm = TRUE)
