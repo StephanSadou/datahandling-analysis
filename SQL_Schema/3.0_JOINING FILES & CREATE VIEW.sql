@@ -2,7 +2,7 @@
 USE data_handling;
 
 #--------CREATING VIEW 1 with same harvest and climate year---------
-DROP VIEW current_compiled_data; #remove already existing view
+DROP VIEW IF EXISTS  current_compiled_data; #remove already existing view
 CREATE VIEW current_compiled_data AS
 SELECT 
     ag.Year as Harvest_Year,
@@ -35,12 +35,7 @@ JOIN (
       # Total Rainfall Grouping
       SUM(CASE WHEN MONTH(date) BETWEEN 7 AND 9 THEN Precipitation_in_mm END) AS Total_Rainfall_Plantation,
       SUM(CASE WHEN (MONTH(date) BETWEEN 10 AND 12 OR MONTH(date) BETWEEN 1 AND 3) THEN Precipitation_in_mm END) AS Total_Rainfall_Growth,
-      SUM(CASE WHEN MONTH(date) BETWEEN 4 AND 6 THEN Precipitation_in_mm END) AS Total_Rainfall_Maturation,
-
-      # Rainy Days Grouping
-      SUM(CASE WHEN (MONTH(date) BETWEEN 7 AND 9 AND Precipitation_in_mm > 1) THEN 1 ELSE 0 END) AS Total_rainy_days_Plantation,
-      SUM(CASE WHEN ((MONTH(date) BETWEEN 10 AND 12 OR MONTH(date) BETWEEN 1 AND 3) AND Precipitation_in_mm > 1) THEN 1 ELSE 0 END) AS Total_rainy_days_Growth,
-      SUM(CASE WHEN (MONTH(date) BETWEEN 4 AND 6 AND Precipitation_in_mm > 1) THEN 1 ELSE 0 END) AS Total_rainy_days_Maturation
+      SUM(CASE WHEN MONTH(date) BETWEEN 4 AND 6 THEN Precipitation_in_mm END) AS Total_Rainfall_Maturation
 
     FROM climate  
     GROUP BY Climate_Year
@@ -51,17 +46,16 @@ ON ei.Year = ag.Year;
 
 select count(*) From current_compiled_data ;#:- Crosscheck linecount:- should be same as FAOSTAT Data
 
-#2. View 2: Compile all datasets and align current harvest year with prior year climate data
-
-DROP VIEW lagged_compiled_data; #remove already existing view
-CREATE VIEW lagged_compiled_data AS
+#View 2. For harvest year data with prior year climate data only
+CREATE VIEW lagged_data AS
 SELECT 
 ag.Year as Harvest_Year,
     cl.*,
     Area_harvested,
     Production,
 	Yield,
-    ei.value as GDP_Value
+    ei.value as Agri_GDP_Share
+
 FROM agriculture ag
 
 JOIN (
@@ -86,12 +80,7 @@ JOIN (
       # Total Rainfall Grouping
       SUM(CASE WHEN MONTH(date) BETWEEN 7 AND 9 THEN Precipitation_in_mm END) AS Total_Rainfall_Plantation_lag1,
       SUM(CASE WHEN (MONTH(date) BETWEEN 10 AND 12 OR MONTH(date) BETWEEN 1 AND 3) THEN Precipitation_in_mm END) AS Total_Rainfall_Growth_lag1,
-      SUM(CASE WHEN MONTH(date) BETWEEN 4 AND 6 THEN Precipitation_in_mm END) AS Total_Rainfall_Maturation_lag1,
-
-      # Rainy Days Grouping
-      SUM(CASE WHEN (MONTH(date) BETWEEN 7 AND 9 AND Precipitation_in_mm > 1) THEN 1 ELSE 0 END) AS Total_rainy_days_Plantation_lag1,
-      SUM(CASE WHEN ((MONTH(date) BETWEEN 10 AND 12 OR MONTH(date) BETWEEN 1 AND 3) AND Precipitation_in_mm > 1) THEN 1 ELSE 0 END) AS Total_rainy_days_Growth_lag1,
-      SUM(CASE WHEN (MONTH(date) BETWEEN 4 AND 6 AND Precipitation_in_mm > 1) THEN 1 ELSE 0 END) AS Total_rainy_days_Maturation_lag1
+      SUM(CASE WHEN MONTH(date) BETWEEN 4 AND 6 THEN Precipitation_in_mm END) AS Total_Rainfall_Maturation_lag1
 
     FROM climate  
     GROUP BY Climate_Year
@@ -100,4 +89,24 @@ ON ag.Year = cl.Climate_Year + 1   # Align climate from previous year with harve
 JOIN economic_indicator ei 
 ON ei.Year = ag.Year;
 
-#select count(*) From lagged_compiled_data :- Crosscheck linecount:- should be 1 less than linecount for FAOSTAT Data
+select count(*) From lagged_data ;#:- Crosscheck linecount:- should be 1 less than linecount for FAOSTAT Data
+
+#--------CREATING VIEW 2 to combine lagged climate data and current year data together with gdp and yield information---------
+DROP VIEW IF EXISTS  lagged_compiled_data;
+CREATE VIEW lagged_compiled_data AS
+SELECT 
+ x.*,
+ y.Avg_Temperature_Plantation,
+ y.Avg_Temperature_Growth,
+ y.Avg_Temperature_Maturation,
+ y.Avg_Humidity_Plantation,
+ y.Avg_Humidity_Growth,
+ y.Avg_Humidity_Maturation,
+ y.Solar_Radiation_Plantation,
+ y.Solar_Radiation_Maturation,
+ y.Solar_Radiation_Growth,
+ y.Total_Rainfall_Plantation,
+ y.Total_Rainfall_Maturation,
+ y.Total_Rainfall_Growth
+FROM lagged_data x
+JOIN current_compiled_data y ON x.Harvest_Year=y.Harvest_Year
