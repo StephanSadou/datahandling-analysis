@@ -5,16 +5,18 @@ library(DBI)
 library(dplyr)
 library(readr)
 library(tidyr)
-library(ranger)
+library(doParallel) # parallel Cross-validation to speed things up
+library(caret)      # cross-validation, training wrappers
+library(ranger)     # fast Random Forest engine
 library(Metrics)
 library(ggplot2)
 library(RMariaDB)
 library(rprojroot)
 library(lubridate)
 
-# -------------------------------------------------------- #
-# ----- Step 1: Connect to the database to read view ----- # 
-# -------------------------------------------------------- #
+# ---------------------------
+# 1. Connect to the database to read view
+# ---------------------------
 
 # Read the environment file to obtain the database credentials 
 root <- find_root(has_file(".Renviron"))
@@ -30,59 +32,43 @@ con <- dbConnect(
 )
 
 # Use connection to connect to the combined view for FAOSTAT datasets
-compiled_data <- dbReadTable(con, "current_compiled_data")
-compiledlagged_data <- dbReadTable(con, "lagged_compiled_data")
+yield_climate_df <- dbReadTable(con, "current_compiled_data")
 
 # Close connection to database 
 dbDisconnect(con)
 
-# -------------------------------------------------------- #
-# ----- Step 2: Feature Engineering & Selection ---------- # 
-# -------------------------------------------------------- #
-
+# ---------------------------
+# 2. Feature Engineering & Feature Selection
+# ---------------------------
 # We are trying to predict Yield --> yield is the dependent variables 
 # The other factors that we are using to predict yield --> independent variables (features)
-
 target <- "Yield"
-predictors <- c("Avg_Temperature_Plantation", "Avg_Temperature_Growth", 
-                "Avg_Temperature_Maturation", "Total_Rainfall_Plantation", 
-                "Total_Rainfall_Growth", "Total_Rainfall_Maturation",
-                "Total_rainy_days_Plantation", "Total_rainy_days_Growth", 
-                "Total_rainy_days_Maturation")
+predictors <- c("Avg_Temperature_Growth","Total_Rainfall_Plantation" )
 
-# Fields in compiled lagged data is different 
-predictors_lagged <- c("Avg_Temperature_Plantation_lag1", "Avg_Temperature_Growth_lag1", 
-                       "Avg_Temperature_Maturation_lag1", "Total_Rainfall_Plantation_lag1", 
-                       "Total_Rainfall_Growth_lag1", "Total_Rainfall_Maturation_lag1",
-                       "Total_rainy_days_Plantation_lag1", "Total_rainy_days_Growth_lag1", 
-                       "Total_rainy_days_Maturation_lag1")
 
 # Select only the column that interest us in our predictive model 
-# We select the same columns from both the compiled and the compiled lagged data
-compiled_data <- compiled_data %>% select(c("Harvest_Year", predictors, target))
-compiledlagged_data <- compiledlagged_data %>% select(c("Harvest_Year", predictors_lagged, target))
+# We select the year column as well --> Will be used later for plotting 
+yield_climate_df  <- yield_climate_df  %>% select(c("Harvest_Year", predictors, target))
 
-# -------------------------------------------------------- #
-# -------- Step 3: Data Splitting (Train/Test) ----------- # 
-# -------------------------------------------------------- #
 
+# ---------------------------
+# 3. Data Splitting (Train/Test)
+# ---------------------------
 # Performing a chronological split of the data
-# 70% will be used for training & 30% will be used for testing 
-n_total   <- nrow(compiled_data)
-split_idx <- floor(0.7 * n_total)
+# 80% will be used for training & 30% will be used for testing 
+n_total   <- nrow(yield_climate_df)
+split_idx <- floor(0.8 * n_total)
 stopifnot(split_idx >= 1, split_idx < n_total)
 
 # We do the splitting for (A) Compiled data & (B) Compiled Lagged data 
-train_A <- compiled_data[seq_len(split_idx), , drop = FALSE]
-test_A  <- compiled_data[(split_idx + 1):n_total, , drop = FALSE]
-
-train_B <- compiledlagged_data[seq_len(split_idx), , drop = FALSE]
-test_B  <- compiledlagged_data[(split_idx + 1):n_total, , drop = FALSE]
-split_year <- train_A$Year[split_idx]
+train <- yield_climate_df[seq_len(split_idx), , drop = FALSE]
+test <- yield_climate_df[(split_idx + 1):n_total, , drop = FALSE]
+split_year <- train$Harvest_Year[split_idx]
 
 
-# Define Metrics for Model Evaluation 
-
+# ---------------------------
+# 4. Defining Metrics for Model Evaluation 
+# ---------------------------
 # R2 coefficient 
 r2 <- function(obs, pred) 1 - sum((obs - pred)^2)/sum((obs - mean(obs))^2)
 
@@ -97,136 +83,190 @@ metrics_tbl <- function(obs, pred) {
   )
 }
 
-# -------------------------------------------------------- #
-# ------------- Step 4: Models Definitions --------------- # 
-# -------------------------------------------------------- #
-
-# Model A --> Model A is the compiled data only 
-# Model B --> Model B is the compiled lagged data 
+# ---------------------------
+# 4. Model Definitions 
+# ---------------------------
 
 # Drop rows with NA in the columns needed for each model (separately for train/test)
+train_df  <- train %>% select(c(predictors, target)) %>%
+  drop_na(all_of(c(predictors, target)))
+test_df   <- test  %>% select(c(predictors, target)) %>%
+  drop_na(all_of(c(predictors, target)))
 
-train_A  <- train_A %>% tidyr::drop_na(dplyr::all_of(c(predictors, target))) 
-test_A   <- test_A  %>% tidyr::drop_na(dplyr::all_of(c(predictors, target)))
+# ---------------------------
+# 5. RF Models Training & Hyperparameter Tuning
+# ---------------------------
+# Random Forest (ranger) — Strong CV + Wider Grid using caret
+# Goal: Find good hyperparameters with 10x repeated CV, then evaluate on test.
+# Assumes the below already created:
+#   - predictors:  character vector of feature names (length p)
+#   - target:      single string naming the target column
+#   - train, test: cleaned data with identical columns
 
-train_B  <- train_B %>% tidyr::drop_na(dplyr::all_of(c(predictors_lagged, target)))
-test_B   <- test_B  %>% tidyr::drop_na(dplyr::all_of(c(predictors_lagged, target)))
+# We will be using a caret tuning pipeline and returns: 
+# A fitted model, predictions, and metrics table (model eval) for both train and test.
 
+# Define model formula and problem size 
+# Turn vector of predictors + target into a standard R formula: target ~ x1 + x2 + ...
+set.seed(42)
+form <- reformulate(predictors, target)
+p <- length(predictors)
+  
+# Parallel processing setup 
+# Use all but one CPU core to make cross-validation (CV) much faster.
+cl <- makeCluster(max(1, parallel::detectCores() - 1))
+registerDoParallel(cl)
 
+# Cross-validation plan
+# We’ll use 10-fold CV repeated 3 times (= 30 resamples per hyperparameter combo).
+k_folds <- 10
+repeats <- 3
+  
+# Build a wider, sensible hyperparameter grid 
+# Random Forest key knobs (for regression with ranger via caret):
+#  - mtry: how many variables to try at each split (search wide around sqrt(p))
+#  - min.node.size: minimum samples in a leaf (smaller → deeper trees)
+#  - splitrule: "variance" for regression (fixed here)
+mtry_candidates <- unique(sort(pmax(1L, round(c(
+  sqrt(p) * c(0.25, 0.5, 0.75, 1, 1.25, 1.5, 2),  # around sqrt(p)
+  seq(1, p, length.out = min(10, p))              # spread across full range if p is small
+)))))
 
-# ----------------------------------------------------------------------- #
-# --------------- Step 5: Random Forest Models Training ----------------- # 
-# ----------------------------------------------------------------------- #
-
-#  MODEL A — Compiled data only 
-form_A <- reformulate(termlabels = predictors, response = target)
-
-fit_A <- ranger(
-  formula         = form_A,
-  data            = train_A,
-  num.trees       = 1000,
-  mtry            = max(1, floor(sqrt(length(predictors)))),
-  min.node.size   = 3,
-  importance      = "permutation",   # safe even if not used later
+min_node_candidates <- c(1L, 2L, 3L, 5L, 7L, 10L, 15L, 20L, 30L)
+  
+tune_grid <- expand.grid(
+  mtry          = mtry_candidates,
+  splitrule     = "variance",
+  min.node.size = min_node_candidates
+)
+  
+# caret’s parallel CV requires a specific seed structure to be fully reproducible.
+# This functions creates a list of seeds: one vector per resample + one final seed.
+make_seeds <- function(n_resamples, grid_size, seed = 42) {
+  set.seed(seed)
+  c(replicate(n_resamples, sample.int(1e6, grid_size, replace = TRUE), simplify = FALSE),
+  list(sample.int(1e6, 1)))
+}
+  
+# Tell caret how to run cross validation and keep it reproducible
+n_resamples <- k_folds * repeats
+ctrl <- trainControl(
+  method           = "repeatedcv",
+  number           = k_folds,
+  repeats          = repeats,
+  verboseIter      = TRUE,
+  allowParallel    = TRUE,
+  seeds            = make_seeds(n_resamples, nrow(tune_grid), seed = 42),
+  savePredictions  = "final",
+  returnResamp     = "all"
+)
+  
+# Training + Hyperparameter tuning of model
+# caret will:
+#   1) try every row in tune_grid,
+#   2) run 10x3 CV for each,
+#   3) pick the best model by RMSE,
+#   4) refit the best model on the *full* training set.
+model <- train(
+  form,
+  data      = train_df,
+  method    = "ranger",
+  trControl = ctrl,
+  tuneGrid  = tune_grid,
+  metric    = "RMSE",
+  importance = "permutation",
+  num.trees  = 1500,
   respect.unordered.factors = "order",
-  seed            = 42
+  seed = 42
 )
+  
+# Always stop the cluster after training to free resources.
+stopCluster(cl); registerDoSEQ()
+  
+# Get fitted values on the TRAIN set (in-sample predictions).
+# Get predictions on the TEST set (unseen data you never trained on).
+# Extract the ground-truth target values from TRAIN/TEST.
+pred_train <- predict(model, newdata = train_df)
+pred_test  <- predict(model, newdata = test_df)
+truth_train <- train_df[[target]]
+truth_test  <- test_df[[target]]
+  
+# ---------------------------
+# 6. Prediction & Models Evaluation
+# ---------------------------
 
-# MODEL B — Compiled lagged data 
-form_B  <- reformulate(termlabels = predictors_lagged, response = target)
-fit_B <- ranger(
-  formula         = form_B,
-  data            = train_B,
-  num.trees       = 1000,
-  mtry            = max(1, floor(sqrt(length(predictors_lagged)))),
-  min.node.size   = 5,
-  importance      = "permutation",
-  respect.unordered.factors = "order",
-  seed            = 42
+# Final Output
+# - model:       the tuned caret model object (includes CV results, fitted final model, etc.)
+# - best_params: the best hyperparameters found by caret (mtry, min.node.size, ...)
+# - train_metrics/test_metrics: Model evaluation metrics (R2, RMSE, MAE, MSE, MAPE)
+# - model_evaluation: Table that contain the metrics for the 
+rf_model_final <- list(
+  model          = model,
+  best_params    = model$bestTune,
+  model_summary  = summary(model),
+  train_metrics  = metrics_tbl(truth_train, pred_train),
+  test_metrics   = metrics_tbl(truth_test,  pred_test),
+  model_evaluation = rbind(
+    cbind(Set = "Train", metrics_tbl(truth_train, pred_train)),
+    cbind(Set = "Test",  metrics_tbl(truth_test,  pred_test))
+  )
 )
+# Output  the results for the best Random Forest model 
+rf_model_final$best_params
+rf_model_final$model_summary
+rf_model_final$model_evaluation
 
-# ----------------------------------------------------------------------- #
-# -------------- Step 5: Prediction & Models Evaluation ----------------- # 
-# ----------------------------------------------------------------------- #
-
-# Using the fitted Model A to predict on training data & then on testing data 
-ModelA_training_values <- train_A[[target]]
-ModelA_testing_values <- test_A[[target]]
-ModelA_training_predictions <- predict(fit_A, newdata = train_A)
-ModelA_testing_predictions <- predict(fit_A, newdata = test_A)
-
-# Using the fitted Model B to predict on training data & then on testing data 
-ModelB_training_values <- train_B[[target]]
-ModelB_testing_values <- test_B[[target]]
-ModelB_training_predictions <- predict(fit_B, newdata = train_B)$predictions
-ModelB_testing_predictions <- predict(fit_B, newdata = test_B)$predictions
-
-cat("\n=== MODEL A (Climate-only) — OLS summary ===\n")
-print(summary(fit_A))
-
-rbind(
-  cbind(Set = "Train", metrics_tbl(ModelA_training_values, ModelA_training_predictions)),
-  cbind(Set = "Test",  metrics_tbl(ModelA_testing_values,  ModelA_testing_predictions))
-)
-
-
-cat("\n=== MODEL B (Climate + Area) — OLS summary ===\n")
-print(summary(fit_B))
-
-rbind(
-  cbind(Set = "Train", metrics_tbl(ModelB_training_values, ModelB_training_predictions)),
-  cbind(Set = "Test",  metrics_tbl(ModelB_testing_values,  ModelB_testing_predictions))
-)
-
-# ---------- 5) Full-series predictions for plotting ----------
+# ---------------------------
+# 7. Full-series predictions for plotting
+# ---------------------------
 # Predict where predictors exist (keep NA where we can't predict)
-df_A_ready <- combined_df %>% drop_na(all_of(climate_cols))
-df_B_ready <- combined_df %>% drop_na(all_of(c(climate_cols, area_col)))
+# First we take all the data for the original compiled data 
+model_df <- yield_climate_df %>%
+  drop_na(all_of(c(predictors, target)))
 
-df_plot <- combined_df %>%
-  transmute(Year, y_true = !!rlang::sym(target)) %>%
-  left_join(df_A_ready %>%
-              mutate(pred_A = as.numeric(predict(fit_A, data = df_A_ready)$predictions)) %>%
-              select(Year, pred_A),
-            by = "Year") %>%
-  left_join(df_B_ready %>%
-              mutate(pred_B = as.numeric(predict(fit_B, data = df_B_ready)$predictions)) %>%
-              select(Year, pred_B),
-            by = "Year")
+# Using the best RF model 
+model_df <- model_df %>%
+  mutate(Predictions = as.numeric(predict(rf_model_final$model, newdata = model_df)))
 
-y_max <- max(df_plot$y_true, na.rm = TRUE)
+
+# ── 3) Join actuals with both sets of predictions by Harvest_Year ──────────────
+# Keep only the columns we need from each side for a clean join.
+df_plot <- yield_climate_df %>% select(Harvest_Year, target) %>% # actuals (e.g., Yield)
+  rename(Actual = target) %>%
+  left_join(
+    model_df %>% select(Harvest_Year, Predictions),
+    by = "Harvest_Year"
+  )
+
+y_max <- max(df_plot$Actual, na.rm = TRUE)
 
 ggplot() +
   annotate("rect", xmin = split_year, xmax = Inf, ymin = -Inf, ymax = Inf, alpha = 0.15) +
-  geom_vline(xintercept = split_year, linetype = "dotted") +
-  geom_line(data = df_plot, aes(Year, y_true, color = "Observed"), linewidth = 1) +
-  geom_line(data = df_plot, aes(Year, pred_A, color = "RF A (Climate-only)"),
+  geom_vline(xintercept = split_year, linetype="dotted") +
+  geom_line(data = df_plot, aes(Harvest_Year, Actual, color = "Observed"), linewidth = 1) +
+  geom_line(data = df_plot, aes(Harvest_Year, Predictions, color = "Random Forest Model"),
             linewidth = 1, linetype = "dashed", na.rm = TRUE) +
-  geom_line(data = df_plot, aes(Year, pred_B, color = "RF B (Climate + Area)"),
-            linewidth = 1, linetype = "dashed", na.rm = TRUE) +
-  annotate("text", x = split_year - 0.5, y = y_max, label = "TRAIN", vjust = -0.3, size = 3.5) +
-  annotate("text", x = split_year + 0.5, y = y_max, label = "TEST",  vjust = -0.3, size = 3.5) +
-  scale_color_manual(values = c("Observed" = "#472575",
-                                "RF A (Climate-only)"   = "#228b8d",
-                                "RF B (Climate + Area)" = "#b3dd2d")) +
+  annotate("text", x = split_year - 2, y = y_max, label = "TRAIN", vjust = -0.3, size = 3.5, color="#472575") +
+  annotate("text", x = split_year + 2, y = y_max, label = "TEST",  vjust = -0.3, size = 3.5, color="red") +
+  scale_color_manual(values = c("Observed" = "black",
+                                "Random Forest Model" = "#228b8d")) + 
   labs(
-    title = "Sugarcane Yield — Random Forest Predictions vs Observed",
-    subtitle = "70% Train / 30% Test (chronological)",
+    title = "Sugarcane Production — Random Forest Predictions vs Observed",
+    subtitle = "80% Train (left) / 20% Test (right) — split is vertical line & shaded area",
     x = "Year", y = "Yield", color = NULL
   ) +
-  theme_minimal(base_size = 12) +
-  theme(legend.position = "bottom")
-
-# ---------- 6) Feature importance (Model B) ----------
-imp <- sort(fit_B$variable.importance, decreasing = TRUE)
-imp_df <- tibble::tibble(Feature = names(imp), Importance = as.numeric(imp))
-
-print(head(imp_df, 15))
-
-ggplot(imp_df %>% slice_head(n = 15),
-       aes(x = reorder(Feature, Importance), y = Importance)) +
-  geom_col() +
-  coord_flip() +
-  labs(title = "Random Forest (Model B) — Permutation Importance (top 15)",
-       x = NULL, y = "Importance") +
-  theme_minimal(base_size = 12)
+  theme_minimal(base_size = 14) +
+  theme(
+    plot.title = element_text(hjust = 0.5, face = "bold", size = 18, margin = margin(b = 5)),
+    plot.subtitle = element_text(hjust = 0.5, size = 12, color = "gray40", margin = margin(b = 15)),
+    plot.caption = element_text(hjust = 0, size = 9, color = "gray50", margin = margin(t = 10)), # Caption at bottom left
+    axis.title = element_text(size = 14, face = "bold", margin = margin(t = 10, b = 0)),
+    axis.text = element_text(size = 11, color = "gray30"),
+    legend.position = "top", # Move legend to top for better use of space, 
+    panel.grid.minor = element_blank(), # Remove minor gridlines for cleaner look
+    panel.grid.major.x = element_line(color = "grey90", linetype = "dotted", linewidth = 0.3), # Subtle vertical grid
+    panel.grid.major.y = element_line(color = "grey90", linetype = "solid", linewidth = 0.5), # More prominent horizontal grid
+    panel.border = element_rect(color = "grey70", fill = NA, linewidth = 0.5),
+    axis.line = element_line(color = "black", size = 0.6),
+    plot.margin = margin(t = 10, r = 20, b = 10, l = 10)
+  )
