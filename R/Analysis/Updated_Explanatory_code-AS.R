@@ -44,9 +44,9 @@ str(df_yield)
 
 # List of season-climate columns expected (some may be NA if no data)
 climate_variables <- c(
-  "Total_Rainfall_Plantation", "Avg_Temperature_Plantation",
-  "Total_Rainfall_Growth", "Avg_Temperature_Growth",
-  "Total_Rainfall_Maturation", "Avg_Temperature_Maturation"
+  "Total_Rainfall_Plantation", "Avg_Temperature_Plantation", "Avg_Humidity_Plantation", "Avg_Solar_Plantation",
+  "Total_Rainfall_Growth", "Avg_Temperature_Growth","Avg_Humidity_Growth", "Avg_Solar_Growth",
+  "Total_Rainfall_Maturation", "Avg_Temperature_Maturation", "Avg_Humidity_Maturation", "Avg_Solar_Maturation"
 )
 
 # Convert to numeric (in case of character)
@@ -160,9 +160,9 @@ fwrite(lagged_df_yield, "results/lagged_df_yield.csv")
 
 # Correlation heatmaps for lagged variables (Pearson & Spearman)
 lagged_variables <- c(
-  "Total_Rainfall_Plantation_lag1", "Avg_Temperature_Plantation_lag1",
-  "Total_Rainfall_Growth_lag1",     "Avg_Temperature_Growth_lag1",
-  "Total_Rainfall_Maturation_lag1", "Avg_Temperature_Maturation_lag1"
+  "Total_Rainfall_Plantation_lag1", "Avg_Temperature_Plantation_lag1","Avg_Humidity_Plantation_lag1", "Avg_Solar_Plantation_lag1",
+  "Total_Rainfall_Growth_lag1",     "Avg_Temperature_Growth_lag1","Avg_Humidity_Growth_lag1", "Avg_Solar_Growth_lag1",
+  "Total_Rainfall_Maturation_lag1", "Avg_Temperature_Maturation_lag1", "Avg_Humidity_Maturation_lag1", "Avg_Solar_Maturation_lag1"
 )
 
 lagged_cor_data <- lagged_df_yield %>%
