@@ -531,7 +531,7 @@ future_results <- future_results %>%
     GDP_Impact_Upper = ((Upper_95 - baseline_yield) / baseline_yield * 100) * (avg_agri_share / 100)
   )
 
-gpd_pred <- ggplot(future_results, aes(x = Harvest_Year, y = GDP_Impact_pct)) +
+gdp_pred <- ggplot(future_results, aes(x = Harvest_Year, y = GDP_Impact_pct)) +
   geom_line(size = 1.3, color = "#1f78b4") +
   geom_ribbon(aes(ymin = GDP_Impact_Lower, ymax = GDP_Impact_Upper),
               fill = "#1f78b4", alpha = 0.2) +
@@ -541,3 +541,7 @@ gpd_pred <- ggplot(future_results, aes(x = Harvest_Year, y = GDP_Impact_pct)) +
     y = "GDP Impact (%)"
   ) +
   theme_minimal(base_size = 14) + ggplot_theme
+
+# Saving the GDP forecast plot 
+filename = "Agricultural_GDP_Imapct_Forecast.png"
+ggsave(filename = filename, plot = gdp_pred, width = 15, height = 10, dpi = 400)
