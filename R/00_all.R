@@ -19,5 +19,15 @@ data_pipeline <- function() {
   source("NASA_V2.R")
   cli_progress_step("Phase 3: Retrieving the World Bank data.")
   source("WB_GDP_V2.R")
+  cli_progress_step("Phase 4: Data loading stage")
+  source("Data_Loading.R")
+  
+  # cli_progress_step("Phase 5: Analysis Stage")
+  # source("<Final Descriptive R script goes here>")
+  # source("<Final Explanatory R script goes here>")
+  # source("<Final Predictive R script goes here>")
+  # cli_progress_step("Phase 6: Part B - NYC Taxi Exercise")
+  # source("<Part B script goes here>")
 }
+
 data_pipeline()

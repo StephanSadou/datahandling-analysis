@@ -1,31 +1,42 @@
 #Automatically push data_stage V2 into database called data_handling
 
-#Install relevant packages
+library("DBI")
+library("readr")
+library("RMariaDB")
+library("rprojroot")
 
-install.packages(c("DBI","RMariaDB","readr"))
+# ---------------------------
+# 1. Create connection to MySQL server using the credentials in the environment file
+# ---------------------------
 
-
-library(DBI)
-library(RMariaDB)
-library(readr)
-
-#  Connect to DB - User to include host and password information
 con <- dbConnect(
   RMariaDB::MariaDB(),
-  dbname = "Data_Handling",
-  host = "127.0.0.1",
-  user = "root",
-  password = "abc123"
+  host = Sys.getenv("DB_HOST"),
+  user = Sys.getenv("DB_USER"),
+  dbname = Sys.getenv("DB_NAME"),
+  password = Sys.getenv("DB_PASSWORD")
 )
 
-#⃣ Load data from datastage folder on GitHub
+# ---------------------------
+# 2. Load data from data stage folder 
+# ---------------------------
 
-agriculture_df <- read_csv("https://raw.githubusercontent.com/StephanSadou/datahandling-analysis/main/data_stage/FAOSTAT_stageV2.csv")
-climate_df <- read_csv("https://raw.githubusercontent.com/StephanSadou/datahandling-analysis/main/data_stage/nasa_stage_V2.csv")
-economic_df <- read_csv("https://raw.githubusercontent.com/StephanSadou/datahandling-analysis/main/data_stage/wb_stage_V2.csv")
+# Obtain the directory path where the script is being executed 
+source("get_cwd.R")
+cwd <- get_script_dir()
 
+# Define the folder path of the data_stage folder 
+data_stage <- file.path(cwd, "..", "data_stage")
 
-# Push data to tables created from step_1: SQL SCRIPT
+agriculture_df <- read_csv(file.path(data_stage, "FAOSTAT_stageV2.csv"))
+climate_df <- read_csv(file.path(data_stage,"nasa_stage_V2.csv"))
+economic_df <- read_csv(file.path(data_stage,"wb_stage_V2.csv"))
+
+# ---------------------------
+# 3. Push data onto the SQL tables 
+# ---------------------------
+
+# Push data to tables created from step 1 using the SQL script 
 dbWriteTable(con, "agriculture", agriculture_df, append = TRUE, row.names = FALSE)
 dbWriteTable(con, "climate", climate_df, append = TRUE, row.names = FALSE)
 dbWriteTable(con, "economic_indicator", economic_df, append = TRUE, row.names = FALSE)

@@ -1,9 +1,8 @@
 CREATE DATABASE Data_Handling;
 USE Data_Handling;
-#------------------------------CREATING TABLES----------------------------------
 
 CREATE TABLE agriculture(
-    prod_id SERIAL PRIMARY KEY, #surrogate auto-increment surrogate PK
+    prod_id SERIAL PRIMARY KEY, 
     Item VARCHAR(100) NOT NULL,
     year Year NOT NULL ,
     Area_harvested DECIMAL(12,2) CHECK(Area_harvested>=0),
@@ -20,9 +19,9 @@ CREATE TABLE climate (
 );
 
 CREATE TABLE economic_indicator(
-    Year YEAR NOT NULL ,    
-    Countryiso3code VARCHAR(10) NOT NULL ,
-    value DECIMAL(12,4) NOT NULL CHECK (value >= 0),  -- indicator value
+    Year YEAR NOT NULL,    
+    Countryiso3code VARCHAR(10) NOT NULL,
+    value DECIMAL(12,4) NOT NULL CHECK (value >= 0), 
 	PRIMARY KEY (Year, Countryiso3code)
 );
 
