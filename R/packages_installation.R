@@ -1,5 +1,5 @@
 # Below are the packages required to run all our scripts for the assignment 
-required_packages <- c("zoo", "DBI", "cowplot", "patchwork",
+required_packages <- c("graph", "Rgraphiz", "zoo", "DBI", "cowplot", "patchwork",
                        "lubridate", "caret", "tidyverse", "broom", "ggrepel", "scales", 
                        "e1071", "outliers", "psych", "doParallel","gt","forecast","ranger", "Metrics",
                        "readr", "stringr", "RMariaDB", "httr", "arrow", "dplyr", "tidyr",
