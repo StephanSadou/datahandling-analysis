@@ -7,17 +7,16 @@ library(data.table)
 library(scales)
 library(ggplot2)
 
-
 # ----------------------------------------------------------------- #
 # ----- Step 0: Initialize the folder paths to save the files ----- # 
 # ----------------------------------------------------------------- #
 
 # Call function from another R script to get current working directory 
 source("get_cwd.R") 
-current_dir <- get_script_dir()
+cwd <- get_script_dir()
 
 # From the R script, move to the root folder where all the other folders are present 
-root_dir <- normalizePath(file.path(current_dir, ".."))
+root_dir <- normalizePath(file.path(cwd, ".."))
 
 # Assign folder for raw and cleansed data
 dir_raw   <- file.path(root_dir, "data_raw")
@@ -40,10 +39,7 @@ quiet <- function(expr) {
   suppressWarnings(suppressMessages(eval.parent(substitute(expr))))
 }
 
-crops_info <- quiet(FAOSTAT::get_faostat_bulk(code = "QCL", data_folder = "data_raw"))
-
-# crops_info <- FAOSTAT::get_faostat_bulk(code = "QCL", data_folder = dir_raw)
-
+crops_info <- quiet(FAOSTAT::get_faostat_bulk(code = "QCL", data_folder = dir_raw))
 
 # --------------------------------------------------------------------- #
 # ----------- Step 2: Find and unzip the 'Normalized' file ------------ # 
@@ -95,11 +91,6 @@ tb <- data.table::fread(norm_csv, nThread = max(1, parallel::detectCores() - 1))
           	 replace_na(list(Area_harvested = 0, Production = 0, Yield=0))%>%   #New blank amounts filled in as 0
              select(Item,Year,Area_harvested,Production,Yield)
 		
-
-
-summary(tb)
-str(tb)
-
 # --------------------------------------------------------------------- #
 # ------Step 4: Analyzing raw data for further filtering conditions ------
 # --------------------------------------------------------------------- #
