@@ -16,7 +16,7 @@ library("psych") #used for descriptive analysis
 library("tidyr") #datasets
 library("DBI")
 library("RMariaDB")
-
+library("rprojroot")
 # Read the environment file to obtain the database credentials 
 root <- find_root(has_file(".Renviron"))
 readRenviron(file.path(root, ".Renviron"))
@@ -161,3 +161,4 @@ ggsave("sugarcane_distributions_mauritius_1x3_combined.png",
 cat("\n✅ Saved combined figures with unified legends and dashed moving averages:\n")
 cat("- sugarcane_trends_mauritius_1x3_combined.png\n")
 cat("- sugarcane_distributions_mauritius_1x3_combined.png\n")
+
