@@ -1,10 +1,10 @@
 #=================-----------NASA POWER SEASONAL & TREND ANALYSIS---------=================#
 
 # --- Libraries ---
-library(ggplot2) #plots
-library(forecast) #time series forecasting
-library(tibble) #restructuring data frames
-library(zoo) #for observed observation in irregular time series
+library("ggplot2") #plots
+library("forecast") #time series forecasting
+library("tibble") #restructuring data frames
+library("zoo") #for observed observation in irregular time series
 library("patchwork") #combining 2/more plots into 1 visual 
 library("lubridate") #for easy date/time manipulation
 library("tidyverse") #collection of R packages (optional)
@@ -744,4 +744,5 @@ humid_trends_split <- compute_trends_split(seasonal_hum, "Humidity", periods_spl
 View(humid_trends_split)  
 
 #======================-----------END OF NASA SCRIPT---------======================#
+
 
