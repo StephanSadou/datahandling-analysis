@@ -15,15 +15,17 @@ library(doParallel) # parallel Cross-validation to speed things up
 # ---------------------------
 
 # ---------------------------
-# 0. Getting current path of analysis folder 
+# 0. Getting current path of predictive analysis folder 
 # ---------------------------
 source("get_cwd.R") # Invoke script from root project folder 
-pred_folder_path = get_script_dir()
+predictive_folder = get_script_dir()
 
 # ---------------------------
 # 1. Load the model produced in the explanatory analysis 
 # --------------------------- 
-# Explanatory folder: 
+# Read Explanatory model from Explanatory analysis folder  
+# explanatory_model <- read_csv(file.path(predictive_folder, "../Explanatory/model.csv)) 
+
 explanatory_model <- read_csv(
   "https://raw.githubusercontent.com/StephanSadou/datahandling-analysis/main/R/Analysis/GAM_model.csv"
 ) %>% arrange(Harvest_Year)
@@ -70,7 +72,8 @@ arima_forecast  <- forecast(arima_model, h = length(yield_test_ts))
 # ACF graph should shows no sudden spikes & p value >0.05
 # demonstrating residuals being white noise)
 # Save the residuals plots in an image 
-png("ARIMA_residuals_check.png", width = 1400, height = 900, res = 150)
+arima_rsd_plt <- file.path(predictive_folder, "ARIMA_residuals_check.png")
+png("arima_rsd_plt", width = 1400, height = 900, res = 150)
 checkresiduals(arima_model)
 dev.off()
 
@@ -159,8 +162,8 @@ arima_plot <- ggplot() +
 
 # Saving the ARIMA plot 
 filename = "ARIMA_Predictive_Model.png"
-ggsave(filename = filename, plot = arima_plot, width = 15, height = 10, dpi = 400)
-
+ggsave(filename = file.path(predictive_folder, filename), plot = arima_plot,
+       width = 15, height = 10, dpi = 400)
 
 # ---------------------------
 # (B) Random Forest Predictive model 
@@ -316,7 +319,8 @@ randomforest_plot <-ggplot() +
   theme_minimal(base_size = 13) + ggplot_theme
   
 # Save the Random Forest plot 
-ggsave(filename = "Random_Forest_Predictive_Model.png",
+filename = "Random_Forest_Predictive_Model.png"
+ggsave(filename = file.path(predictive_folder, filename),
        plot = randomforest_plot, width = 15, height = 10, dpi = 400)
 
 # --------------------------- 
@@ -349,7 +353,8 @@ summary(arimax_model)
 # Residual diagnostics
 #Spikes could be seen in the ACF graph and p value is < 0.05, 
 # indicating significant autocorrelation in residuals.
-png("ARIMAX_residuals_check.png", width = 1400, height = 900, res = 150)
+arimax_rsd_plt <- file.path(predictive_folder, "ARIMAX_residuals_check.png")
+png(arimax_rsd_plt, width = 1400, height = 900, res = 150)
 checkresiduals(arimax_model)
 dev.off()
 
@@ -509,8 +514,8 @@ arimax_plot <- ggplot() +
 
 # Saving the ARIMAX plot 
 filename = "ARIMAX_Predictive_Model.png"
-ggsave(filename = filename, plot = arimax_plot, width = 15, height = 10, dpi = 400)
-
+ggsave(filename = file.path(predictive_folder, filename), plot = arimax_plot,
+       width = 15, height = 10, dpi = 400)
 
 # ---------------------------
 # (D) Estimating Agricultural GDP from forecasted yield 
@@ -544,4 +549,5 @@ gdp_pred <- ggplot(future_results, aes(x = Harvest_Year, y = GDP_Impact_pct)) +
 
 # Saving the GDP forecast plot 
 filename = "Agricultural_GDP_Imapct_Forecast.png"
-ggsave(filename = filename, plot = gdp_pred, width = 15, height = 10, dpi = 400)
+ggsave(filename = file.path(predictive_folder, filename), plot = gdp_pred,
+       width = 15, height = 10, dpi = 400)
