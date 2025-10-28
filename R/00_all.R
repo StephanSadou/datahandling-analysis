@@ -7,7 +7,6 @@
 # ----- Phase 3 : Retrieve data from the FAOSTAT R package  ----------------- # 
 # --------------------------------------------------------------------------- #
 
-
 message("Checking if all the required packages are installed...")
 source("packages_installation.R")
 
@@ -22,10 +21,10 @@ data_pipeline <- function() {
   cli_progress_step("Phase 4: Data loading stage")
   source("Data_Loading.R")
   
-  # cli_progress_step("Phase 5: Analysis Stage")
+  cli_progress_step("Phase 5: Analysis Stage")
   # source("<Final Descriptive R script goes here>")
   # source("<Final Explanatory R script goes here>")
-  # source("<Final Predictive R script goes here>")
+  source(file.path(getwd(), "Analysis", "Predictive", "Predictive_Analysis_Final.R"))
   # cli_progress_step("Phase 6: Part B - NYC Taxi Exercise")
   # source("<Part B script goes here>")
 }

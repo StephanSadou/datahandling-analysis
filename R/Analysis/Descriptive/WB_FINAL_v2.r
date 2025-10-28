@@ -16,7 +16,7 @@ library("psych") #used for descriptive analysis
 library("tidyr") #datasets
 library("DBI")
 library("RMariaDB")
-
+library("rprojroot")
 if (!require("sandwich")) install.packages("sandwich"); library("sandwich")
 if (!require("lmtest")) install.packages("lmtest"); library("lmtest")
 
@@ -253,5 +253,6 @@ ag_gdp_trends_full <- by_metric_full %>%
 # View tables (matches your "view(...)" style)
 view(ag_gdp_trends_split)
 view(ag_gdp_trends_full)
+
 
 #======================-----------END OF GDP SCRIPT---------======================#

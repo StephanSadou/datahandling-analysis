@@ -1,10 +1,10 @@
 #=================-----------NASA POWER SEASONAL & TREND ANALYSIS---------=================#
 
 # --- Libraries ---
-library(ggplot2) #plots
-library(forecast) #time series forecasting
-library(tibble) #restructuring data frames
-library(zoo) #for observed observation in irregular time series
+library("ggplot2") #plots
+library("forecast") #time series forecasting
+library("tibble") #restructuring data frames
+library("zoo") #for observed observation in irregular time series
 library("patchwork") #combining 2/more plots into 1 visual 
 library("lubridate") #for easy date/time manipulation
 library("tidyverse") #collection of R packages (optional)
@@ -19,20 +19,24 @@ library("psych") #used for descriptive analysis
 library("tidyr") #datasets
 library("DBI") #SQL database connection
 library("RMariaDB") #SQL database connection
-library(gridExtra)
-
+library("gridExtra")
+library("rprojroot")
 # ---- Output directory (ensures files are saved in a known location) -------------------------------
 dir_stage <- file.path(getwd(), "outputs")         # define an "outputs" folder under current wd
 if (!dir.exists(dir_stage)) dir.create(dir_stage, recursive = TRUE)  # create folder (with full directory) if missing
 
-##########################DATABASE CONNECTION
-#  Connect to DB - User to include host and password information
-# Define connection parameters
-db_name <- "data_handling"
-db_host <- "127.0.0.1"
-db_user <- "root"
-db_password <- "786Suhqyr***"
+# Read the environment file to obtain the database credentials 
+root <- find_root(has_file(".Renviron"))
+readRenviron(file.path(root, ".Renviron"))
 
+# Use the credentials to connect to our local database 
+con <- dbConnect(
+  RMariaDB::MariaDB(),
+  dbname = Sys.getenv("DB_NAME"),
+  host = Sys.getenv("DB_HOST"),
+  user = Sys.getenv("DB_USER"),
+  password = Sys.getenv("DB_PASSWORD")
+)
 
 # Create a safe connection
 con <- dbConnect(
@@ -91,9 +95,7 @@ trend_summary <- lapply(trend_models, function(model) {
   bind_rows()
 
 # Save trend summary
-write.csv(trend_summary, file.path(dir_stage, "nasa_trend_summary.csv"), row.names = FALSE)
 
-cat("\n=== Linear Trend Summary ===\n")
 print(trend_summary)
 
 ##########################Create Trend Plots with 3-Year Moving Average ---
@@ -742,3 +744,5 @@ humid_trends_split <- compute_trends_split(seasonal_hum, "Humidity", periods_spl
 View(humid_trends_split)  
 
 #======================-----------END OF NASA SCRIPT---------======================#
+
+

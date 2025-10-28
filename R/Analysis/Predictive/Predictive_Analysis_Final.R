@@ -19,6 +19,7 @@ library(doParallel) # parallel Cross-validation to speed things up
 # ---------------------------
 source("get_cwd.R") # Invoke script from root project folder 
 predictive_folder = get_script_dir()
+result_folder = file.path(predictive_folder, "results")
 
 # ---------------------------
 # 1. Load the model produced in the explanatory analysis 
@@ -72,8 +73,8 @@ arima_forecast  <- forecast(arima_model, h = length(yield_test_ts))
 # ACF graph should shows no sudden spikes & p value >0.05
 # demonstrating residuals being white noise)
 # Save the residuals plots in an image 
-arima_rsd_plt <- file.path(predictive_folder, "ARIMA_residuals_check.png")
-png("arima_rsd_plt", width = 1400, height = 900, res = 150)
+arima_rsd_plt <- file.path(result_folder, "ARIMA_residuals_check.png")
+png(arima_rsd_plt, width = 1400, height = 900, res = 150)
 checkresiduals(arima_model)
 dev.off()
 
@@ -162,169 +163,11 @@ arima_plot <- ggplot() +
 
 # Saving the ARIMA plot 
 filename = "ARIMA_Predictive_Model.png"
-ggsave(filename = file.path(predictive_folder, filename), plot = arima_plot,
+ggsave(filename = file.path(result_folder, filename), plot = arima_plot,
        width = 15, height = 10, dpi = 400)
 
-# ---------------------------
-# (B) Random Forest Predictive model 
-# ---------------------------
-
-# Define the features/predictors and target variable from the explanatory model 
-predictors <- c("Avg_Temperature_Growth", "Total_Rainfall_Plantation")          
-target     <- "Yield_Value"   
-
-# Build train/test frames aligned with the split (no duplicates)
-train_df <- explanatory_model %>%
-  filter(Harvest_Year <= train_end_year) %>%
-  select(Harvest_Year, all_of(c(predictors, target))) %>%
-  drop_na(all_of(c(predictors, target)))
-
-test_df  <- explanatory_model %>%
-  filter(Harvest_Year >= test_start_year) %>%
-  select(Harvest_Year, all_of(c(predictors, target))) %>%
-  drop_na(all_of(c(predictors, target)))
-
-
-# ---------------------------
-# 2. RF Models Training & Hyperparameter Tuning
-# ---------------------------
-# Random Forest (ranger) — Strong CV + Wider Grid using caret
-# Goal: Find good hyperparameters with 10x repeated CV, then evaluate on test.
-# Assumes the below already created:
-#   - predictors:  character vector of feature names (length p)
-#   - target:      single string naming the target column
-#   - train, test: cleaned data with identical columns
-
-# We will be using a caret tuning pipeline and returns: 
-# A fitted model, predictions, and metrics table (model eval) for both train and test.
-
-# Define model formula and problem size 
-# Turn vector of predictors + target into a standard R formula: target ~ x1 + x2 + ...
-set.seed(42)
-form <- reformulate(predictors, target)
-p <- length(predictors)
-
-# Parallel processing setup 
-# Use all but one CPU core to make cross-validation (CV) much faster.
-cl <- makeCluster(max(1, parallel::detectCores() - 1))
-registerDoParallel(cl)
-on.exit({try(stopCluster(cl), silent = TRUE); registerDoSEQ()}, add = TRUE)
-
-# Cross-validation plan
-# We’ll use 10-fold CV repeated 3 times (= 30 resamples per hyperparameter combo).
-k_folds <- 10 
-repeats <- 3
-
-# Build a wider, sensible hyperparameter grid 
-# Random Forest key knobs (for regression with ranger via caret):
-#  - mtry: how many variables to try at each split (search wide around sqrt(p))
-#  - min.node.size: minimum samples in a leaf (smaller → deeper trees)
-#  - splitrule: "variance" for regression (fixed here)
-mtry_candidates <- unique(pmax(1L, round(c(sqrt(p) * c(0.5, 1, 2),
-                                           seq(1, p, length.out = p)))))
-min_node_candidates <- c(1L, 2L, 3L, 5L, 7L, 10L)
-
-tune_grid <- expand.grid(
-  mtry          = mtry_candidates,
-  splitrule     = "variance",
-  min.node.size = min_node_candidates
-)
-
-# caret’s parallel CV requires a specific seed structure to be fully reproducible.
-# This functions creates a list of seeds: one vector per resample + one final seed.
-make_seeds <- function(n_resamples, grid_size, seed = 42) {
-  set.seed(seed)
-  c(replicate(n_resamples, sample.int(1e6, grid_size, replace = TRUE), simplify = FALSE),
-    list(sample.int(1e6, 1)))
-}
-
-# Tell caret how to run cross validation and keep it reproducible
-n_resamples <- k_folds * repeats
-ctrl <- trainControl(
-  method = "repeatedcv",
-  number = k_folds,
-  repeats = repeats,
-  verboseIter = FALSE,
-  allowParallel = TRUE,
-  seeds = make_seeds(n_resamples, nrow(tune_grid), 42),
-  savePredictions = "final",
-  returnResamp = "all"
-)
-
-# Training + Hyperparameter tuning of model
-# caret will:
-#   1) try every row in tune_grid,
-#   2) run 10x3 CV for each,
-#   3) pick the best model by RMSE,
-#   4) refit the best model on the *full* training set.
-rf_fit <- train(
-  form,
-  data = train_df,
-  method = "ranger",
-  trControl = ctrl,
-  tuneGrid = tune_grid,
-  metric = "RMSE",
-  importance = "permutation",
-  num.trees = 1500,
-  respect.unordered.factors = "order",
-  seed = 42
-)
-
-# Predictions
-pred_train <- predict(rf_fit, newdata = train_df)
-pred_test  <- predict(rf_fit, newdata = test_df)
-
-# Metrics (train/test)
-# Using the metrics library we will be evaluating the RMSE, MAE, MSE & MAPE 
-r2 <- function(obs, pred) 1 - sum((obs - pred)^2)/sum((obs - mean(obs))^2)
-metrics_tbl <- function(obs, pred) data.frame(
-  R2 = r2(obs, pred),
-  RMSE = rmse(obs, pred),
-  MAE = mae(obs, pred),
-  MSE = mse(obs, pred),
-  MAPE = mape(obs, pred) * 100
-)
-print(list(
-  rf_best_params = rf_fit$bestTune,
-  rf_train = metrics_tbl(train_df[[target]], pred_train),
-  rf_test  = metrics_tbl(test_df[[target]],  pred_test)
-))
-
-# Full-series predictions for plotting 
-df_plot_rf <- explanatory_model %>%
-  select(Harvest_Year, all_of(c(predictors, target))) %>%
-  mutate(Predictions = as.numeric(predict(rf_fit, newdata = ., na.action = na.pass))) %>%
-  rename(Actual = !!target)
-
-# Obtain the highest value for yield which will be used for annotating text 
-y_max <- max(df_plot_rf$Actual, na.rm = TRUE)
-
-randomforest_plot <-ggplot() +
-  annotate("rect", xmin = test_start_year - 0.5, xmax = Inf, ymin = -Inf, ymax = Inf, alpha = 0.10) +
-  geom_vline(xintercept = train_end_year + 0.5, linetype = "dotted") +
-  geom_line(data = df_plot_rf, aes(Harvest_Year, Actual, color = "Observed"), linewidth = 1) +
-  geom_point(data = df_plot_rf, aes(Harvest_Year, Actual, color = "Observed"), shape = 17, size = 1.8) +
-  geom_line(data = df_plot_rf, aes(Harvest_Year, Predictions, color = "Random Forest Model"),
-            linewidth = 1, linetype = "dashed", na.rm = TRUE) +
-  geom_point(data = df_plot_rf, aes(Harvest_Year, Predictions, color = "Random Forest Model"),
-             shape = 17, size = 1.8, na.rm = TRUE) +
-  annotate("text", x = train_end_year - 1, y = y_max, label = "TRAIN", vjust = -0.3, size = 3.5, color="#1f77b4") +
-  annotate("text", x = test_start_year + 1, y = y_max, label = "TEST",  vjust = -0.3, size = 3.5, color="#137547") +
-  scale_color_manual(values = c(
-    "Observed"             = "#0072B2",
-    "Random Forest Model"  = "#009E73")) +
-  labs(title = "Random Forest: Predictions vs Observed",
-       subtitle = "80% Train (left) / 20% Test (right)",
-       x = "Year", y = "Yield") +
-  theme_minimal(base_size = 13) + ggplot_theme
-  
-# Save the Random Forest plot 
-filename = "Random_Forest_Predictive_Model.png"
-ggsave(filename = file.path(predictive_folder, filename),
-       plot = randomforest_plot, width = 15, height = 10, dpi = 400)
-
 # --------------------------- 
-# (C) ARIMAX Model
+# (B) ARIMAX Model
 # --------------------------- 
 
 # --------------------------- 
@@ -351,9 +194,9 @@ arimax_model <- auto.arima(yield_train_ts, xreg = xreg_train, allowdrift = TRUE)
 summary(arimax_model)
 
 # Residual diagnostics
-#Spikes could be seen in the ACF graph and p value is < 0.05, 
+# Spikes could be seen in the ACF graph and p value is < 0.05, 
 # indicating significant autocorrelation in residuals.
-arimax_rsd_plt <- file.path(predictive_folder, "ARIMAX_residuals_check.png")
+arimax_rsd_plt <- file.path(result_folder, "ARIMAX_residuals_check.png")
 png(arimax_rsd_plt, width = 1400, height = 900, res = 150)
 checkresiduals(arimax_model)
 dev.off()
@@ -514,8 +357,168 @@ arimax_plot <- ggplot() +
 
 # Saving the ARIMAX plot 
 filename = "ARIMAX_Predictive_Model.png"
-ggsave(filename = file.path(predictive_folder, filename), plot = arimax_plot,
+ggsave(filename = file.path(result_folder, filename), plot = arimax_plot,
        width = 15, height = 10, dpi = 400)
+
+
+# ---------------------------
+# (C) Random Forest Predictive model 
+# ---------------------------
+
+# Define the features/predictors and target variable from the explanatory model 
+predictors <- c("Avg_Temperature_Growth", "Total_Rainfall_Plantation")          
+target     <- "Yield_Value"   
+
+# Build train/test frames aligned with the split (no duplicates)
+train_df <- explanatory_model %>%
+  filter(Harvest_Year <= train_end_year) %>%
+  select(Harvest_Year, all_of(c(predictors, target))) %>%
+  drop_na(all_of(c(predictors, target)))
+
+test_df  <- explanatory_model %>%
+  filter(Harvest_Year >= test_start_year) %>%
+  select(Harvest_Year, all_of(c(predictors, target))) %>%
+  drop_na(all_of(c(predictors, target)))
+
+
+# ---------------------------
+# 2. RF Models Training & Hyperparameter Tuning
+# ---------------------------
+# Random Forest (ranger) — Strong CV + Wider Grid using caret
+# Goal: Find good hyperparameters with 10x repeated CV, then evaluate on test.
+# Assumes the below already created:
+#   - predictors:  character vector of feature names (length p)
+#   - target:      single string naming the target column
+#   - train, test: cleaned data with identical columns
+
+# We will be using a caret tuning pipeline and returns: 
+# A fitted model, predictions, and metrics table (model eval) for both train and test.
+
+# Define model formula and problem size 
+# Turn vector of predictors + target into a standard R formula: target ~ x1 + x2 + ...
+set.seed(42)
+form <- reformulate(predictors, target)
+p <- length(predictors)
+
+# Parallel processing setup 
+# Use all but one CPU core to make cross-validation (CV) much faster.
+cl <- makeCluster(max(1, parallel::detectCores() - 1))
+registerDoParallel(cl)
+on.exit({try(stopCluster(cl), silent = TRUE); registerDoSEQ()}, add = TRUE)
+
+# Cross-validation plan
+# We’ll use 10-fold CV repeated 3 times (= 30 resamples per hyperparameter combo).
+k_folds <- 10 
+repeats <- 3
+
+# Build a wider, sensible hyperparameter grid 
+# Random Forest key knobs (for regression with ranger via caret):
+#  - mtry: how many variables to try at each split (search wide around sqrt(p))
+#  - min.node.size: minimum samples in a leaf (smaller → deeper trees)
+#  - splitrule: "variance" for regression (fixed here)
+mtry_candidates <- unique(pmax(1L, round(c(sqrt(p) * c(0.5, 1, 2),
+                                           seq(1, p, length.out = p)))))
+min_node_candidates <- c(1L, 2L, 3L, 5L, 7L, 10L)
+
+tune_grid <- expand.grid(
+  mtry          = mtry_candidates,
+  splitrule     = "variance",
+  min.node.size = min_node_candidates
+)
+
+# caret’s parallel CV requires a specific seed structure to be fully reproducible.
+# This functions creates a list of seeds: one vector per resample + one final seed.
+make_seeds <- function(n_resamples, grid_size, seed = 42) {
+  set.seed(seed)
+  c(replicate(n_resamples, sample.int(1e6, grid_size, replace = TRUE), simplify = FALSE),
+    list(sample.int(1e6, 1)))
+}
+
+# Tell caret how to run cross validation and keep it reproducible
+n_resamples <- k_folds * repeats
+ctrl <- trainControl(
+  method = "repeatedcv",
+  number = k_folds,
+  repeats = repeats,
+  verboseIter = FALSE,
+  allowParallel = TRUE,
+  seeds = make_seeds(n_resamples, nrow(tune_grid), 42),
+  savePredictions = "final",
+  returnResamp = "all"
+)
+
+# Training + Hyperparameter tuning of model
+# caret will:
+#   1) try every row in tune_grid,
+#   2) run 10x3 CV for each,
+#   3) pick the best model by RMSE,
+#   4) refit the best model on the *full* training set.
+rf_fit <- train(
+  form,
+  data = train_df,
+  method = "ranger",
+  trControl = ctrl,
+  tuneGrid = tune_grid,
+  metric = "RMSE",
+  importance = "permutation",
+  num.trees = 1500,
+  respect.unordered.factors = "order",
+  seed = 42
+)
+
+# Predictions
+pred_train <- predict(rf_fit, newdata = train_df)
+pred_test  <- predict(rf_fit, newdata = test_df)
+
+# Metrics (train/test)
+# Using the metrics library we will be evaluating the RMSE, MAE, MSE & MAPE 
+r2 <- function(obs, pred) 1 - sum((obs - pred)^2)/sum((obs - mean(obs))^2)
+metrics_tbl <- function(obs, pred) data.frame(
+  R2 = r2(obs, pred),
+  RMSE = rmse(obs, pred),
+  MAE = mae(obs, pred),
+  MSE = mse(obs, pred),
+  MAPE = mape(obs, pred) * 100
+)
+print(list(
+  rf_best_params = rf_fit$bestTune,
+  rf_train = metrics_tbl(train_df[[target]], pred_train),
+  rf_test  = metrics_tbl(test_df[[target]],  pred_test)
+))
+
+# Full-series predictions for plotting 
+df_plot_rf <- explanatory_model %>%
+  select(Harvest_Year, all_of(c(predictors, target))) %>%
+  mutate(Predictions = as.numeric(predict(rf_fit, newdata = ., na.action = na.pass))) %>%
+  rename(Actual = !!target)
+
+# Obtain the highest value for yield which will be used for annotating text 
+y_max <- max(df_plot_rf$Actual, na.rm = TRUE)
+
+randomforest_plot <-ggplot() +
+  annotate("rect", xmin = test_start_year - 0.5, xmax = Inf, ymin = -Inf, ymax = Inf, alpha = 0.10) +
+  geom_vline(xintercept = train_end_year + 0.5, linetype = "dotted") +
+  geom_line(data = df_plot_rf, aes(Harvest_Year, Actual, color = "Observed"), linewidth = 1) +
+  geom_point(data = df_plot_rf, aes(Harvest_Year, Actual, color = "Observed"), shape = 17, size = 1.8) +
+  geom_line(data = df_plot_rf, aes(Harvest_Year, Predictions, color = "Random Forest Model"),
+            linewidth = 1, linetype = "dashed", na.rm = TRUE) +
+  geom_point(data = df_plot_rf, aes(Harvest_Year, Predictions, color = "Random Forest Model"),
+             shape = 17, size = 1.8, na.rm = TRUE) +
+  annotate("text", x = train_end_year - 1, y = y_max, label = "TRAIN", vjust = -0.3, size = 3.5, color="#1f77b4") +
+  annotate("text", x = test_start_year + 1, y = y_max, label = "TEST",  vjust = -0.3, size = 3.5, color="#137547") +
+  scale_color_manual(values = c(
+    "Observed"             = "#0072B2",
+    "Random Forest Model"  = "#009E73")) +
+  labs(title = "Random Forest: Predictions vs Observed",
+       subtitle = "80% Train (left) / 20% Test (right)",
+       x = "Year", y = "Yield") +
+  theme_minimal(base_size = 13) + ggplot_theme
+
+# Save the Random Forest plot 
+filename = "Random_Forest_Predictive_Model.png"
+ggsave(filename = file.path(result_folder, filename),
+       plot = randomforest_plot, width = 15, height = 10, dpi = 400)
+
 
 # ---------------------------
 # (D) Estimating Agricultural GDP from forecasted yield 
@@ -549,5 +552,5 @@ gdp_pred <- ggplot(future_results, aes(x = Harvest_Year, y = GDP_Impact_pct)) +
 
 # Saving the GDP forecast plot 
 filename = "Agricultural_GDP_Imapct_Forecast.png"
-ggsave(filename = file.path(predictive_folder, filename), plot = gdp_pred,
+ggsave(filename = file.path(result_folder, filename), plot = gdp_pred,
        width = 15, height = 10, dpi = 400)
