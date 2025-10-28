@@ -12,7 +12,6 @@ library("scales")
 library("ggrepel")
 library("outliers")
 library("e1071")
-library("psych") #used for descriptive analysis
 library("tidyr") #datasets
 library("DBI")
 library("RMariaDB")
@@ -256,3 +255,4 @@ view(ag_gdp_trends_full)
 
 
 #======================-----------END OF GDP SCRIPT---------======================#
+
