@@ -1,8 +1,5 @@
 ###############################################################################
 # EXPLANATORY PIPELINE — Climate → Sugarcane Yield (Mauritius)
-# Merges user's code with advanced diagnostics and GAM for explanation only
-# NOTE: This is an explanatory analysis (no forecasting).
-# Adapt paths as needed.
 ###############################################################################
 
 # ---------------------------
@@ -44,9 +41,9 @@ str(df_yield)
 
 # List of season-climate columns expected (some may be NA if no data)
 climate_variables <- c(
-  "Total_Rainfall_Plantation", "Avg_Temperature_Plantation", "Avg_Humidity_Plantation", "Avg_Solar_Plantation",
-  "Total_Rainfall_Growth", "Avg_Temperature_Growth","Avg_Humidity_Growth", "Avg_Solar_Growth",
-  "Total_Rainfall_Maturation", "Avg_Temperature_Maturation", "Avg_Humidity_Maturation", "Avg_Solar_Maturation"
+  "Total_Rainfall_Plantation", "Avg_Temperature_Plantation", "Avg_Humidity_Plantation", "Solar_Radiation_Plantation",
+  "Total_Rainfall_Growth", "Avg_Temperature_Growth","Avg_Humidity_Growth", "Solar_Radiation_Growth",
+  "Total_Rainfall_Maturation", "Avg_Temperature_Maturation", "Avg_Humidity_Maturation", "Solar_Radiation_Maturation"
 )
 
 # Convert to numeric (in case of character)
@@ -105,7 +102,7 @@ fwrite(as.data.frame(spearman_cor), "results/spearman_cor_matrix.csv")
 
 # ---------------------------
 # 8. Pairwise correlation significance tests
-#    We will store p-values in a table for reporting rather than printing many cor.test lines
+#    We will store p-values in a table for reporting
 # ---------------------------
 corr_tests <- function(x, y, method = "pearson") {
   ok <- complete.cases(x, y)
@@ -138,31 +135,16 @@ fwrite(test_res, "results/correlation_tests_summary.csv")
 
 lagged_df_yield  <- dbReadTable(con, "lagged_compiled_data")
 
+str(lagged_df_yield)
 
-lagged_df_yield <- df_yield %>%
-  inner_join(lagged_df_yield, by = "Harvest_Year") %>%
-  select(
-    -Climate_Year.x,
-    -GDP_Value.x,
-    -Area_harvested.x,     
-    -Production.x,
-    -Yield.x
-  )%>%rename(
-    Climate_Year=Climate_Year.y,
-    Yield=Yield.y ,
-    Agri_GDP_Share=GDP_Value.y,
-    Area_harvested=Area_harvested.y,
-    Production=Production.y
-  )
-print(lagged_df_yield)
 # Save lagged snapshot
 fwrite(lagged_df_yield, "results/lagged_df_yield.csv")
 
 # Correlation heatmaps for lagged variables (Pearson & Spearman)
 lagged_variables <- c(
-  "Total_Rainfall_Plantation_lag1", "Avg_Temperature_Plantation_lag1","Avg_Humidity_Plantation_lag1", "Avg_Solar_Plantation_lag1",
-  "Total_Rainfall_Growth_lag1",     "Avg_Temperature_Growth_lag1","Avg_Humidity_Growth_lag1", "Avg_Solar_Growth_lag1",
-  "Total_Rainfall_Maturation_lag1", "Avg_Temperature_Maturation_lag1", "Avg_Humidity_Maturation_lag1", "Avg_Solar_Maturation_lag1"
+  "Total_Rainfall_Plantation_lag1", "Avg_Temperature_Plantation_lag1","Avg_Humidity_Plantation_lag1", "Solar_Radiation_Plantation_lag1",
+  "Total_Rainfall_Growth_lag1",     "Avg_Temperature_Growth_lag1","Avg_Humidity_Growth_lag1", "Solar_Radiation_Growth_lag1",
+  "Total_Rainfall_Maturation_lag1", "Avg_Temperature_Maturation_lag1", "Avg_Humidity_Maturation_lag1", "Solar_Radiation_Maturation_lag1"
 )
 
 lagged_cor_data <- lagged_df_yield %>%
@@ -176,23 +158,23 @@ lagged_pearson_melt <- reshape2::melt(lagged_pearson_cor)
 lagged_pearson_plot <- ggplot(lagged_pearson_melt, aes(x = Var1, y = Var2, fill = value)) +
   geom_tile(color = "white", linewidth = 0.5) +
   scale_fill_gradient2(low = "#d73027", mid = "white", high = "#1a9850", midpoint = 0,
-                       limit = c(-1,1), space = "Lab") +
+                       limit = c(-1,1), space = "Lab", name = "Lagged Pearson") +
   geom_text(aes(label = round(value, 2)), color = "black", size = 3.5) +
   theme_minimal(base_size = 12) +
   theme(axis.text.x = element_text(angle = 45, vjust = 1, hjust = 1),
         panel.grid = element_blank()) +
-  labs(title = "Lagged Pearson Correlation Matrix")
+  labs(title = "Lagged Pearson Correlation Matrix", x = NULL , y = NULL)
 
 lagged_spearman_melt <- reshape2::melt(lagged_spearman_cor)
 lagged_spearman_plot <- ggplot(lagged_spearman_melt, aes(x = Var1, y = Var2, fill = value)) +
   geom_tile(color = "white", linewidth = 0.5) +
   scale_fill_gradient2(low = "#d73027", mid = "white", high = "#1a9850", midpoint = 0,
-                       limit = c(-1,1), space = "Lab") +
+                       limit = c(-1,1), space = "Lab" , name = "Lagged Spearman") +
   geom_text(aes(label = round(value, 2)), color = "black", size = 3.5) +
   theme_minimal(base_size = 12) +
   theme(axis.text.x = element_text(angle = 45, vjust = 1, hjust = 1),
         panel.grid = element_blank()) +
-  labs(title = "Lagged Spearman Correlation Matrix")
+  labs(title = "Lagged Spearman Correlation Matrix", x = NULL , y = NULL)
 
 ggsave("results/lagged_pearson_heatmap.png", lagged_pearson_plot, width = 9, height = 6, dpi = 300)
 ggsave("results/lagged_spearman_heatmap.png", lagged_spearman_plot, width = 9, height = 6, dpi = 300)
@@ -209,11 +191,6 @@ pearson_plot + lagged_pearson_plot
 
 # Side-by-side comparison of pearson correlation and lagged pearson correlation
 spearman_plot + lagged_spearman_plot
-
-#The correlation heatmaps show that sugarcane yield is more positively influenced by temperature than by rainfall across all stages. 
-#Moderate warmth during the growth and plantation phases tends to increase yield, while excessive rainfall, especially during plantation or maturation, slightly reduces it. 
-#Relationships are mostly non-linear and stronger under Spearman than Pearson, suggesting that yield responds to climate within optimal thresholds rather than in a strictly linear way. 
-#Lagged correlations indicate only weak carry-over effects from the previous season, confirming that current-season climate—particularly temperature during growth—plays the dominant role in determining sugarcane productivity.
 
 # ---------------------------
 # 10. Advanced dependence: Distance correlation
@@ -235,21 +212,12 @@ adv_summary <- data.frame(
 fwrite(adv_summary, "results/advanced_dependence_summary.csv")
 print(adv_summary)
 
-#Sugarcane yield in your dataset tends to rise modestly with higher temperatures, while rainfall shows little to slightly negative effect.
-#The dependence is weak but not random, and non-linear patterns exist 
-#— meaning yield likely peaks within optimal climate ranges rather than continuously increasing.
-
-
 lagged_adv_summary <- data.frame(
   Distance = round(lagged_dcor_values, 3)
 )
 
+fwrite(lagged_adv_summary, "results/lagged_advanced_dependence_summary.csv")
 print(lagged_adv_summary)
-
-#The lagged (previous-year) climate conditions have weak but non-negligible influence on sugarcane yield.
-#Temperature patterns tend to have a slight positive residual effect, while rainfall tends to have neutral to slightly negative lagged effects.
-#This implies that sugarcane yield is mostly driven by the current season’s climate, with limited memory from the past season 
-#— except possibly for temperature-driven soil or ratoon continuity effects.
 
 # ---------------------------
 # 11. Multicollinearity: VIF using seasonal predictors
@@ -268,12 +236,12 @@ lm_for_lagged_vif_formula <- as.formula(paste("Yield ~", paste(lagged_predictors
 lagged_vif_model <- lm(lm_for_lagged_vif_formula, data = lagged_df_yield)
 lagged_vif_values <- tryCatch(vif(lagged_vif_model), error = function(e) NA)
 lagged_vif_df <- data.frame(Variable = names(lagged_vif_values), VIF = round(as.numeric(lagged_vif_values), 2))
-fwrite(lagged_vif_df, "results/vif_values.csv")
+fwrite(lagged_vif_df, "results/lagged_vif_values.csv")
 print(lagged_vif_df)
 
 # Flag problematic multicollinearity (VIF > 5)
 if (any(!is.na(vif_values) & vif_values > 5)) {
-  cat("\n⚠️ Warning: high VIF detected for variables:\n")
+  cat("\n Warning: high VIF detected for variables:\n")
   print(names(vif_values[vif_values > 5]))
 } else {
   cat("\nNo strong multicollinearity detected (VIF <= 5 for available predictors)\n")
@@ -287,20 +255,25 @@ if (any(!is.na(lagged_vif_values) & lagged_vif_values > 5)) {
   cat("\nNo strong multicollinearity detected (VIF <= 5 for available predictors)\n")
 }
 
-
 # ---------------------------
-# LINEAR REGRESSION MODEL
+# DATA MODEL
 # ---------------------------
+#we build the data model taking into consideration the multicollinearity
 
-#check linear model
 model_df <- lagged_df_yield %>%
   select(Climate_Year,Harvest_Year,Yield,
          Total_Rainfall_Plantation, Avg_Temperature_Plantation,
+         Avg_Humidity_Plantation,
          Total_Rainfall_Growth, Avg_Temperature_Growth,
+         Avg_Humidity_Growth, Solar_Radiation_Growth,
          Total_Rainfall_Maturation, Avg_Temperature_Maturation,
-         Total_Rainfall_Plantation_lag1,Avg_Temperature_Growth_lag1,
-         Total_Rainfall_Maturation_lag1,Avg_Temperature_Maturation_lag1,
-         Total_Rainfall_Growth_lag1,Avg_Temperature_Plantation_lag1,
+         Avg_Humidity_Maturation,
+         Total_Rainfall_Plantation_lag1, Avg_Temperature_Plantation_lag1,
+         Avg_Humidity_Plantation_lag1, Solar_Radiation_Plantation_lag1,
+         Total_Rainfall_Growth_lag1, Avg_Temperature_Growth_lag1,
+         Avg_Humidity_Growth_lag1, Solar_Radiation_Growth_lag1,
+         Total_Rainfall_Maturation_lag1, Avg_Temperature_Maturation_lag1,
+         Avg_Humidity_Maturation_lag1, Solar_Radiation_Maturation_lag1,
          Agri_GDP_Share
   ) %>%
   rename(Yield_Value=Yield)%>%
@@ -310,26 +283,10 @@ model_df <- lagged_df_yield %>%
 fwrite(model_df, "results/GAM_model.csv")
 print(model_df)
 
-lm_model <- lm(
-  Yield_Value ~
-    Total_Rainfall_Plantation + Avg_Temperature_Plantation +
-    Total_Rainfall_Growth + Avg_Temperature_Growth +
-    Total_Rainfall_Maturation + Avg_Temperature_Maturation +
-    Total_Rainfall_Plantation_lag1 + Avg_Temperature_Plantation_lag1 +
-    Total_Rainfall_Growth_lag1 + Avg_Temperature_Growth_lag1 +
-    Total_Rainfall_Maturation_lag1 + Avg_Temperature_Maturation_lag1 +
-    Agri_GDP_Share,
-  data = model_df
-)
-summary(lm_model)
-
-summary(lm_model)$adj.r.squared
-
 # ---------------------------
-# 12. Decide variables for GAM (Generalized Additive Model) : detect nonlinearity
-#    Use threshold on distance correlation (data-driven)
+# 12. Decide variables for different models : detect nonlinearity
+#    Use threshold on distance correlation
 # ---------------------------
-# choose threshold: dCor > 0.5 (recommendation), but if sample is small, lower threshold e.g., 0.4
 nonlinear_threshold <- 0.5
 nonlinear_vars <- names(dcor_values[dcor_values > nonlinear_threshold & abs(pearson_cor["Yield", names(dcor_values)]) < 0.3])
 
@@ -337,38 +294,109 @@ cat("\nDetected nonlinear variables (distance corr >", nonlinear_threshold, "and
 print(nonlinear_vars)
 
 
-#For explanatory GAM we include smooth terms for all climate variables (recommended),
+# ---------------------------
+# LINEAR REGRESSION MODEL
+# ---------------------------
+#check linear model
 
-# but we will pay special attention to variables flagged as nonlinear (interpret edf).
-# Also include the 1-year lag terms (from lagged_df_yield) — merge them back.
+lm_model_1 <- lm(
+  Yield_Value ~
+    Total_Rainfall_Plantation + Avg_Temperature_Plantation+
+  Avg_Humidity_Plantation+
+  Total_Rainfall_Growth+ Avg_Temperature_Growth+
+  Avg_Humidity_Growth+ Solar_Radiation_Growth+
+  Total_Rainfall_Maturation+ Avg_Temperature_Maturation+
+  Avg_Humidity_Maturation+
+  Total_Rainfall_Plantation_lag1+ Avg_Temperature_Plantation_lag1+
+  Avg_Humidity_Plantation_lag1+ Solar_Radiation_Plantation_lag1+
+  Total_Rainfall_Growth_lag1+ Avg_Temperature_Growth_lag1+
+  Avg_Humidity_Growth_lag1+ Solar_Radiation_Growth_lag1+
+  Total_Rainfall_Maturation_lag1+ Avg_Temperature_Maturation_lag1+
+  Avg_Humidity_Maturation_lag1+ Solar_Radiation_Maturation_lag1,
+  data = model_df
+)
+summary(lm_model_1)
+
+summary(lm_model_1)$adj.r.squared
+
+#REFINED OLS REGRESSION MODEL
+lm_model_2 <- lm(
+  Yield_Value ~
+    Avg_Temperature_Growth+
+    Solar_Radiation_Growth,
+  data = model_df
+)
+summary(lm_model_2)
+
+summary(lm_model_2)$adj.r.squared
 
 # ---------------------------
-# 13. Explanatory GAM (current + 1-year lag) : smooth terms for each relevant variable
+# 13. Explanatory GAM (current + 1-year lag) : smooth terms for each relevant variable, excluding Solar_Radiation_Plantation & Solar_Radiation_Maturation
 # ---------------------------
-# Build GAM formula: smooth on each seasonal temp + rainfall and on lags
-gam_formula_parts <- c(
-  "s(Total_Rainfall_Plantation)",     "s(Avg_Temperature_Plantation)",
-  "s(Total_Rainfall_Growth)",         "s(Avg_Temperature_Growth)",
-  "s(Total_Rainfall_Maturation)",     "s(Avg_Temperature_Maturation)",
-"s(Total_Rainfall_Plantation_lag1)","s(Avg_Temperature_Plantation_lag1)",
- "s(Total_Rainfall_Growth_lag1)",    "s(Avg_Temperature_Growth_lag1)",
- "s(Total_Rainfall_Maturation_lag1)","s(Avg_Temperature_Maturation_lag1)")
-gam_formula <- as.formula(paste("Yield_Value ~", paste(gam_formula_parts, collapse = " + ")))
+# Build GAM formula: smooth on each seasonal temp + rainfall + solar radiation and on lags
+gam_formula_parts_1 <- c(
+  "s(Total_Rainfall_Plantation)", "s(Avg_Temperature_Plantation)",
+  "s(Avg_Humidity_Plantation)", 
+  "s(Total_Rainfall_Growth)", "s(Avg_Temperature_Growth)",
+  "s(Avg_Humidity_Growth)", "s(Solar_Radiation_Growth)",
+  "s(Total_Rainfall_Maturation)", "s(Avg_Temperature_Maturation)",
+  "s(Avg_Humidity_Maturation)",
+  "s(Total_Rainfall_Plantation_lag1)", "s(Avg_Temperature_Plantation_lag1)",
+  "s(Avg_Humidity_Plantation_lag1)", "s(Solar_Radiation_Plantation_lag1)",
+  "s(Total_Rainfall_Growth_lag1)", "s(Avg_Temperature_Growth_lag1)",
+  "s(Avg_Humidity_Growth_lag1)", "s(Solar_Radiation_Growth_lag1)",
+  "s(Total_Rainfall_Maturation_lag1)", "s(Avg_Temperature_Maturation_lag1)",
+  "s(Avg_Humidity_Maturation_lag1)", "s(Solar_Radiation_Maturation_lag1)")
+gam_formula_1 <- as.formula(paste("Yield_Value ~", paste(gam_formula_parts_1, collapse = " + ")))
 
 # Fit GAM with REML (stable smoothing)
-gam_model <- gam(gam_formula, data = model_df, method = "REML")
-saveRDS(gam_model, "results/gam_model.rds")
+gam_model_1 <- gam(gam_formula_1, data = model_df, method = "REML")
 
 # Summary (edf indicates nonlinearity when > 1)
+gam_summary_1 <- summary(gam_model_1)
+print(gam_summary_1)
+gam_summary_1$r.sq
+
+# REPEAT: Build GAM formula with only significant variables
+gam_formula_parts_2 <- c(
+  "s(Total_Rainfall_Plantation)", "s(Avg_Temperature_Growth)", "(Solar_Radiation_Growth)", 
+  "s(Total_Rainfall_Plantation_lag1)", "s(Avg_Temperature_Growth_lag1)", "s(Avg_Humidity_Growth_lag1) ")
+
+gam_formula_2 <- as.formula(paste("Yield_Value ~", paste(gam_formula_parts_2, collapse = " + ")))
+
+gam_model_2 <- gam(gam_formula_2, data = model_df, method = "REML")
+
+gam_summary_2 <- summary(gam_model_2)
+print(gam_summary_2)
+gam_summary_2$r.sq
+
+# REPEAT 2: Build GAM formula with only significant variables
+gam_formula_parts_3 <- c(
+  "s(Avg_Temperature_Growth)", "s(Solar_Radiation_Growth)", 
+  "s(Total_Rainfall_Plantation_lag1)", "s(Avg_Temperature_Growth_lag1)")
+
+gam_formula_3 <- as.formula(paste("Yield_Value ~", paste(gam_formula_parts_3, collapse = " + ")))
+
+gam_model_3 <- gam(gam_formula_3, data = model_df, method = "REML")
+
+gam_summary_3 <- summary(gam_model_3)
+print(gam_summary_3)
+gam_summary_3$r.sq
+
+# FINAL GAM MODEL
+gam_formula_parts <- c(
+  "s(Avg_Temperature_Growth)", "s(Solar_Radiation_Growth)", 
+  "s(Total_Rainfall_Plantation_lag1)", "s(Avg_Temperature_Growth_lag1)")
+
+gam_formula <- as.formula(paste("Yield_Value ~", paste(gam_formula_parts, collapse = " + ")))
+
+gam_model <- gam(gam_formula, data = model_df, method = "REML")
+
 gam_summary <- summary(gam_model)
 print(gam_summary)
 gam_summary$r.sq
 
-
-#The GAM results suggest that sugarcane yield is mainly influenced by temperature during the growth phase and rainfall during plantation and maturation.
-#The effects are mostly non-linear, meaning yield improves up to an optimal level of temperature/rainfall and then declines.
-#The influence of previous season’s (lagged) weather is minimal.
-#Overall, current-season conditions dominate yield outcomes, confirming your correlation analysis.
+saveRDS(gam_model, "results/gam_model.rds")
 
 # ---------------------------
 # 14. GAM diagnostics & plotting (explanatory)
@@ -379,7 +407,7 @@ par(mfrow = c(4,3), mar = c(4,4,2,1))
 plot(gam_model, shade = TRUE, seWithMean = TRUE, pages = 1)
 dev.off()
 
-# Nicer ggplots using gratia (if installed)
+# Nicer ggplots using gratia
 png("results/gam_draws.png", width = 1600, height = 1200)
 draw(gam_model, residuals = FALSE)
 dev.off()
@@ -413,7 +441,6 @@ econ_summary <- model_df %>%
     Avg_GDP_Impact_pct = mean(GDP_Impact_pct, na.rm = TRUE)
   )
 fwrite(econ_summary, "results/economic_summary.csv")
-print(econ_summary)
 
 yield_gdp_plot <- ggplot(model_df, aes(x = Yield_Change_pct, y = GDP_Impact_pct)) +
   geom_point(
@@ -456,12 +483,6 @@ fwrite(gam_coefs, "results/gam_coefs.csv")
 # Also save partial effect edf summary
 edf_table <- as.data.frame(cbind(term = rownames(gam_summary$s.table), gam_summary$s.table))
 fwrite(edf_table, "results/gam_edf_table.csv")
-
-#The economic summary shows that the model-predicted sugarcane yield aligns almost perfectly with observed data, 
-#confirming a very accurate model fit. 
-#On average, yield remains around 71,480 units, and the year-to-year change is negligible. 
-#The estimated GDP impact of these yield variations is minimal (≈0.013%), 
-#suggesting that while sugarcane is economically relevant, its short-term yield fluctuations have a limited macroeconomic effect on national GDP.
 
 # ---------------------------
 # 17. Final messages & recommendations
