@@ -15,7 +15,6 @@ library("outliers") #outlier detection and handling
 library("e1071") #for fuzzy clustering
 library("dplyr") #data_manipulation
 library("ggplot2") #graph visualisation
-library("psych") #used for descriptive analysis
 library("tidyr") #datasets
 library("DBI") #SQL database connection
 library("RMariaDB") #SQL database connection
@@ -744,5 +743,6 @@ humid_trends_split <- compute_trends_split(seasonal_hum, "Humidity", periods_spl
 View(humid_trends_split)  
 
 #======================-----------END OF NASA SCRIPT---------======================#
+
 
 
