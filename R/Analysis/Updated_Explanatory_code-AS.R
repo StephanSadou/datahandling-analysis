@@ -53,7 +53,7 @@ df_yield <- df_yield %>% mutate(across(all_of(climate_variables), as.numeric))
 fwrite(df_yield, file = "results/df_yield_merged.csv")
 
 # ---------------------------
-# 7. Exploratory correlation: Pearson, Spearman heatmaps
+# Exploratory correlation: Pearson, Spearman heatmaps
 # ---------------------------
 # Prepare correlation dataset: Yield + climate season vars
 cor_data <- df_yield %>% select(Yield, all_of(climate_variables)) %>% mutate(across(everything(), as.numeric))
@@ -101,8 +101,8 @@ fwrite(as.data.frame(pearson_cor), "results/pearson_cor_matrix.csv")
 fwrite(as.data.frame(spearman_cor), "results/spearman_cor_matrix.csv")
 
 # ---------------------------
-# 8. Pairwise correlation significance tests
-#    We will store p-values in a table for reporting
+# Pairwise correlation significance tests
+# We will store p-values in a table for reporting
 # ---------------------------
 corr_tests <- function(x, y, method = "pearson") {
   ok <- complete.cases(x, y)
@@ -130,7 +130,7 @@ for (i in seq_along(vars)) {
 fwrite(test_res, "results/correlation_tests_summary.csv")
 
 # ---------------------------
-# 9. Lagged variables — keeping 1-year lags
+# Lagged variables — keeping 1-year lags
 # ---------------------------
 
 lagged_df_yield  <- dbReadTable(con, "lagged_compiled_data")
@@ -193,7 +193,7 @@ pearson_plot + lagged_pearson_plot
 spearman_plot + lagged_spearman_plot
 
 # ---------------------------
-# 10. Advanced dependence: Distance correlation
+# Advanced dependence: Distance correlation
 # ---------------------------
 # Distance correlation (detects nonlinear)
 adv_vars <- df_yield %>% select(all_of(climate_variables)) %>% mutate(across(everything(), as.numeric))
@@ -220,7 +220,7 @@ fwrite(lagged_adv_summary, "results/lagged_advanced_dependence_summary.csv")
 print(lagged_adv_summary)
 
 # ---------------------------
-# 11. Multicollinearity: VIF using seasonal predictors
+# Multicollinearity: VIF using seasonal predictors
 # ---------------------------
 # Build a linear model with main seasonal predictors to compute VIF
 present_predictors <- climate_variables[climate_variables %in% names(df_yield)]
@@ -263,17 +263,11 @@ if (any(!is.na(lagged_vif_values) & lagged_vif_values > 5)) {
 model_df <- lagged_df_yield %>%
   select(Climate_Year,Harvest_Year,Yield,
          Total_Rainfall_Plantation, Avg_Temperature_Plantation,
-         Avg_Humidity_Plantation,
          Total_Rainfall_Growth, Avg_Temperature_Growth,
-         Avg_Humidity_Growth, Solar_Radiation_Growth,
          Total_Rainfall_Maturation, Avg_Temperature_Maturation,
-         Avg_Humidity_Maturation,
          Total_Rainfall_Plantation_lag1, Avg_Temperature_Plantation_lag1,
-         Avg_Humidity_Plantation_lag1, Solar_Radiation_Plantation_lag1,
          Total_Rainfall_Growth_lag1, Avg_Temperature_Growth_lag1,
-         Avg_Humidity_Growth_lag1, Solar_Radiation_Growth_lag1,
          Total_Rainfall_Maturation_lag1, Avg_Temperature_Maturation_lag1,
-         Avg_Humidity_Maturation_lag1, Solar_Radiation_Maturation_lag1,
          Agri_GDP_Share
   ) %>%
   rename(Yield_Value=Yield)%>%
@@ -284,8 +278,8 @@ fwrite(model_df, "results/GAM_model.csv")
 print(model_df)
 
 # ---------------------------
-# 12. Decide variables for different models : detect nonlinearity
-#    Use threshold on distance correlation
+# Decide variables for different models : detect nonlinearity
+# Use threshold on distance correlation
 # ---------------------------
 nonlinear_threshold <- 0.5
 nonlinear_vars <- names(dcor_values[dcor_values > nonlinear_threshold & abs(pearson_cor["Yield", names(dcor_values)]) < 0.3])
@@ -302,17 +296,11 @@ print(nonlinear_vars)
 lm_model_1 <- lm(
   Yield_Value ~
     Total_Rainfall_Plantation + Avg_Temperature_Plantation+
-  Avg_Humidity_Plantation+
   Total_Rainfall_Growth+ Avg_Temperature_Growth+
-  Avg_Humidity_Growth+ Solar_Radiation_Growth+
   Total_Rainfall_Maturation+ Avg_Temperature_Maturation+
-  Avg_Humidity_Maturation+
   Total_Rainfall_Plantation_lag1+ Avg_Temperature_Plantation_lag1+
-  Avg_Humidity_Plantation_lag1+ Solar_Radiation_Plantation_lag1+
   Total_Rainfall_Growth_lag1+ Avg_Temperature_Growth_lag1+
-  Avg_Humidity_Growth_lag1+ Solar_Radiation_Growth_lag1+
-  Total_Rainfall_Maturation_lag1+ Avg_Temperature_Maturation_lag1+
-  Avg_Humidity_Maturation_lag1+ Solar_Radiation_Maturation_lag1,
+  Total_Rainfall_Maturation_lag1+ Avg_Temperature_Maturation_lag1,
   data = model_df
 )
 summary(lm_model_1)
@@ -323,7 +311,7 @@ summary(lm_model_1)$adj.r.squared
 lm_model_2 <- lm(
   Yield_Value ~
     Avg_Temperature_Growth+
-    Solar_Radiation_Growth,
+    Total_Rainfall_Growth,
   data = model_df
 )
 summary(lm_model_2)
@@ -331,22 +319,16 @@ summary(lm_model_2)
 summary(lm_model_2)$adj.r.squared
 
 # ---------------------------
-# 13. Explanatory GAM (current + 1-year lag) : smooth terms for each relevant variable, excluding Solar_Radiation_Plantation & Solar_Radiation_Maturation
+# Explanatory GAM (current + 1-year lag) : smooth terms for each relevant variable, excluding Solar_Radiation_Plantation & Solar_Radiation_Maturation
 # ---------------------------
 # Build GAM formula: smooth on each seasonal temp + rainfall + solar radiation and on lags
 gam_formula_parts_1 <- c(
   "s(Total_Rainfall_Plantation)", "s(Avg_Temperature_Plantation)",
-  "s(Avg_Humidity_Plantation)", 
   "s(Total_Rainfall_Growth)", "s(Avg_Temperature_Growth)",
-  "s(Avg_Humidity_Growth)", "s(Solar_Radiation_Growth)",
   "s(Total_Rainfall_Maturation)", "s(Avg_Temperature_Maturation)",
-  "s(Avg_Humidity_Maturation)",
   "s(Total_Rainfall_Plantation_lag1)", "s(Avg_Temperature_Plantation_lag1)",
-  "s(Avg_Humidity_Plantation_lag1)", "s(Solar_Radiation_Plantation_lag1)",
   "s(Total_Rainfall_Growth_lag1)", "s(Avg_Temperature_Growth_lag1)",
-  "s(Avg_Humidity_Growth_lag1)", "s(Solar_Radiation_Growth_lag1)",
-  "s(Total_Rainfall_Maturation_lag1)", "s(Avg_Temperature_Maturation_lag1)",
-  "s(Avg_Humidity_Maturation_lag1)", "s(Solar_Radiation_Maturation_lag1)")
+  "s(Total_Rainfall_Maturation_lag1)", "s(Avg_Temperature_Maturation_lag1)")
 gam_formula_1 <- as.formula(paste("Yield_Value ~", paste(gam_formula_parts_1, collapse = " + ")))
 
 # Fit GAM with REML (stable smoothing)
@@ -359,8 +341,7 @@ gam_summary_1$r.sq
 
 # REPEAT: Build GAM formula with only significant variables
 gam_formula_parts_2 <- c(
-  "s(Total_Rainfall_Plantation)", "s(Avg_Temperature_Growth)", "(Solar_Radiation_Growth)", 
-  "s(Total_Rainfall_Plantation_lag1)", "s(Avg_Temperature_Growth_lag1)", "s(Avg_Humidity_Growth_lag1) ")
+  "s(Total_Rainfall_Plantation)", "s(Avg_Temperature_Growth)")
 
 gam_formula_2 <- as.formula(paste("Yield_Value ~", paste(gam_formula_parts_2, collapse = " + ")))
 
@@ -370,23 +351,15 @@ gam_summary_2 <- summary(gam_model_2)
 print(gam_summary_2)
 gam_summary_2$r.sq
 
-# REPEAT 2: Build GAM formula with only significant variables
-gam_formula_parts_3 <- c(
-  "s(Avg_Temperature_Growth)", "s(Solar_Radiation_Growth)", 
-  "s(Total_Rainfall_Plantation_lag1)", "s(Avg_Temperature_Growth_lag1)")
-
-gam_formula_3 <- as.formula(paste("Yield_Value ~", paste(gam_formula_parts_3, collapse = " + ")))
-
-gam_model_3 <- gam(gam_formula_3, data = model_df, method = "REML")
-
-gam_summary_3 <- summary(gam_model_3)
-print(gam_summary_3)
-gam_summary_3$r.sq
 
 # FINAL GAM MODEL
 gam_formula_parts <- c(
-  "s(Avg_Temperature_Growth)", "s(Solar_Radiation_Growth)", 
-  "s(Total_Rainfall_Plantation_lag1)", "s(Avg_Temperature_Growth_lag1)")
+  "s(Total_Rainfall_Plantation)", "s(Avg_Temperature_Plantation)",
+  "s(Total_Rainfall_Growth)", "s(Avg_Temperature_Growth)",
+  "s(Total_Rainfall_Maturation)", "s(Avg_Temperature_Maturation)",
+  "s(Total_Rainfall_Plantation_lag1)", "s(Avg_Temperature_Plantation_lag1)",
+  "s(Total_Rainfall_Growth_lag1)", "s(Avg_Temperature_Growth_lag1)",
+  "s(Total_Rainfall_Maturation_lag1)", "s(Avg_Temperature_Maturation_lag1)")
 
 gam_formula <- as.formula(paste("Yield_Value ~", paste(gam_formula_parts, collapse = " + ")))
 
@@ -399,7 +372,7 @@ gam_summary$r.sq
 saveRDS(gam_model, "results/gam_model.rds")
 
 # ---------------------------
-# 14. GAM diagnostics & plotting (explanatory)
+# GAM diagnostics & plotting (explanatory)
 # ---------------------------
 # Plot partial effects (base R plots)
 png("results/gam_partial_effects.png", width = 1600, height = 1200)
@@ -424,7 +397,7 @@ dev.off()
 
 
 # ---------------------------
-# 15. Descriptive economic context (explanatory only)
+# Descriptive economic context (explanatory only)
 # ---------------------------
 model_df <- model_df %>%
   mutate(
