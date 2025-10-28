@@ -2,9 +2,9 @@
 required_packages <- c("graph", "Rgraphiz", "zoo", "DBI", "cowplot", "patchwork",
                        "lubridate", "caret", "tidyverse", "broom", "ggrepel", "scales", 
                        "e1071", "outliers", "psych", "doParallel","gt","forecast","ranger", "Metrics",
-                       "readr", "stringr", "RMariaDB", "httr", "arrow", "dplyr", "tidyr",
-                       "tibble", "scales", "ggplot2","FAOSTAT", "jsonlite", "data.table",
-                       "rstudioapi", "rprojroot", "gridExtra", "lmtest", "sandwich")
+                       "readr", "stringr", "RMariaDB", "httr", "arrow", "dplyr", "tidyr", "reshape2",
+                       "tibble", "scales", "ggplot2","FAOSTAT", "jsonlite", "data.table", "energy", "car", "mgcv",
+                       "rstudioapi", "rprojroot", "gridExtra", "lmtest", "sandwich", "gratia")
 
 # Checking what are the R packages installed on the system 
 installed_packages <- .packages(all.available = TRUE) 
