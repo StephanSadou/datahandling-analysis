@@ -23,7 +23,7 @@ library("rprojroot")
 # ---- Output directory (ensures files are saved in a known location) -------------------------------
 dir_stage <- file.path(getwd(), "outputs")         # define an "outputs" folder under current wd
 if (!dir.exists(dir_stage)) dir.create(dir_stage, recursive = TRUE)  # create folder (with full directory) if missing
-
+result_folder = file.path(predictive_folder, "results")
 # Read the environment file to obtain the database credentials 
 root <- find_root(has_file(".Renviron"))
 readRenviron(file.path(root, ".Renviron"))
@@ -124,7 +124,7 @@ p_humidity <- plot_trend(nasa_annual, "Humidity_percent", "Humidity (%)",
 
 ##########################Combine and Save Trend Plots ---
 trend_combined <- grid.arrange(p_temp, p_rain, p_solar, p_humidity, ncol = 2)
-trend_png_path <- file.path(results, "nasa_trend_profiles.png")
+trend_png_path <- file.path(result_folder, "nasa_trend_profiles.png")
 ggsave(filename = trend_png_path, plot = trend_combined, width = 12, height = 8, dpi = 300)
 
 cat(paste0("\n📈 Trend plots saved to: ", trend_png_path, "\n"))
@@ -160,7 +160,7 @@ p4 <- plot_seasonal(nasa_seasonal, "Solar_radiation_kWh_m2_mean", "Solar_radiati
                     "Solar Radiation (kWh/m²)", "Seasonal Profile: Solar Radiation", "#f2a541")
 
 seasonal_combined <- grid.arrange(p1, p2, p3, p4, ncol = 2)
-seasonal_png_path <- file.path(results, "nasa_seasonal_profiles.png")
+seasonal_png_path <- file.path(result_folder, "nasa_seasonal_profiles.png")
 ggsave(filename = seasonal_png_path, plot = seasonal_combined, width = 12, height = 8, dpi = 300)
 
 
@@ -418,10 +418,10 @@ g_solar <- plot_cycle_trend_unified(
 
 #print(g_solar)
 
-ggsave(file.path(results, "trend_cycles_temp.png"),  g_temp,  width = 12, height = 8, dpi = 300)
-ggsave(file.path(results, "trend_cycles_rain.png"),  g_rain,  width = 12, height = 8, dpi = 300)
-ggsave(file.path(results, "trend_cycles_hum.png"),   g_hum,   width = 12, height = 8, dpi = 300)
-ggsave(file.path(results, "trend_cycles_solar.png"), g_solar, width = 12, height = 8, dpi = 300)
+ggsave(file.path(result_folder, "trend_cycles_temp.png"),  g_temp,  width = 12, height = 8, dpi = 300)
+ggsave(file.path(result_folder, "trend_cycles_rain.png"),  g_rain,  width = 12, height = 8, dpi = 300)
+ggsave(file.path(result_folder, "trend_cycles_hum.png"),   g_hum,   width = 12, height = 8, dpi = 300)
+ggsave(file.path(result_folder, "trend_cycles_solar.png"), g_solar, width = 12, height = 8, dpi = 300)
 
 
 
@@ -603,10 +603,10 @@ kurtosis(Growth84$Solar)
 skewness(Maturation84$Solar)
 kurtosis(Maturation84$Solar)
 
-ggsave(file.path(results, "density_temperature.png"), g_temp_density, width = 12, height = 8, dpi = 300)
-ggsave(file.path(results, "density_rainfall.png"),    g_rain_density, width = 12, height = 8, dpi = 300)
-ggsave(file.path(results, "density_humidity.png"),    g_humidity_density, width = 12, height = 8, dpi = 300)
-ggsave(file.path(results, "density_solar.png"),    g_solar_density, width = 12, height = 8, dpi = 300)
+ggsave(file.path(result_folder, "density_temperature.png"), g_temp_density, width = 12, height = 8, dpi = 300)
+ggsave(file.path(result_folder, "density_rainfall.png"),    g_rain_density, width = 12, height = 8, dpi = 300)
+ggsave(file.path(result_folder, "density_humidity.png"),    g_humidity_density, width = 12, height = 8, dpi = 300)
+ggsave(file.path(result_folder, "density_solar.png"),    g_solar_density, width = 12, height = 8, dpi = 300)
 print(dir_stage)
 cat(paste0("\n📸 Seasonal profiles saved to: ", seasonal_png_path, "\n"))
 cat("\n✅ NASA POWER trend and seasonal analysis completed successfully!\n")
@@ -743,6 +743,7 @@ humid_trends_split <- compute_trends_split(seasonal_hum, "Humidity", periods_spl
 View(humid_trends_split)  
 
 #======================-----------END OF NASA SCRIPT---------======================#
+
 
 
 
