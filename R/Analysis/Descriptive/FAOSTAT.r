@@ -152,14 +152,16 @@ hist_final <- plot_grid(
   ncol = 1, rel_heights = c(1, 0.08)
 )
 
-ggsave("sugarcane_distributions_mauritius_1x3_combined.png",
-       plot = hist_final, width = 18, height = 6, dpi = 300)
+filename = "sugarcane_distributions_mauritius_1x3_combined.png"
+ggsave(filename = file.path(result_folder, filename), plot = trend_final,
+       width = 18, height = 6, dpi = 300)
 
 
 # ========================================================= #
 cat("\n✅ Saved combined figures with unified legends and dashed moving averages:\n")
 cat("- sugarcane_trends_mauritius_1x3_combined.png\n")
 cat("- sugarcane_distributions_mauritius_1x3_combined.png\n")
+
 
 
 
