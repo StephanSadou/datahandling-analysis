@@ -74,9 +74,10 @@ GDP <- ggplot(agro_long, aes(x = year, y = Value, color = Series, linetype = Ser
 # --- Step 6: Display and Save ---
 print(GDP)
 
-ggsave("agriculture_gdp_trend_mauritius.png", plot = GDP, width = 8, height = 5, dpi = 300)
+filename = ("agriculture_gdp_trend_mauritius.png", plot = GDP, width = 8, height = 5, dpi = 300)
 
-
+ggsave(filename = file.path(result_folder, filename), plot = trend_final,
+       width = 18, height = 6, dpi = 300)
 
 #%change in agricultural variables vs %change in GDP 
 # ---------- 1) Compute YoY % changes (single source of truth) ----------
@@ -257,6 +258,7 @@ view(ag_gdp_trends_full)
 
 
 #======================-----------END OF GDP SCRIPT---------======================#
+
 
 
 
