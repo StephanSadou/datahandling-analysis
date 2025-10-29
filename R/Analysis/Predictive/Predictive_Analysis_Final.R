@@ -1,14 +1,14 @@
-library(gt)
-library(dplyr)
-library(readr)
+library(gt)       
+library(dplyr)    
+library(readr)    
 library(tidyr)
-library(caret) # cross-validation, training wrappers
+library(caret) 
 library(tibble)
-library(ranger)  # fast Random Forest engine
+library(ranger)  
 library(Metrics)
 library(ggplot2)
 library(forecast)
-library(doParallel) # parallel Cross-validation to speed things up
+library(doParallel) 
 
 # ---------------------------
 # (A) ARIMA Predictive Model (Baseline)
@@ -92,13 +92,13 @@ test_years  <- as.integer(time(yield_test_ts))
 fit_years   <- as.integer(time(fitted(arima_model)))
 fc_years    <- as.integer(time(arima_forecast$mean))
 
-# Create a dataframe using tibble of actual values for plotting (train + test)
+# Create a dataframe using tibble of actual yield values for the whole period 
 actual_df <- tibble(
-  Year  = c(train_years,        test_years),
-  Value = c(as.numeric(yield_train_ts), as.numeric(yield_test_ts)),
-  Part  = c(rep("Actual (train)", length(yield_train_ts)),
-            rep("Actual (test)",  length(yield_test_ts)))
-)
+  Year  = c(train_years, test_years),
+  Value = c(as.numeric(yield_train_ts), as.numeric(yield_test_ts))
+) %>%
+  arrange(Year) %>%
+  mutate(Part = "Actual")
 
 # Build a tidy data frame of MODEL values for plotting (fitted on train + forecast on test)
 model_df_plot <- tibble(
@@ -119,6 +119,7 @@ ggplot_theme = theme(
   axis.title = element_text(size = 14, face = "bold", margin = margin(t = 10, b = 0)),
   axis.text  = element_text(size = 11, color = "gray30"),
   legend.position = "top",
+  legend.title = element_blank(),
   panel.grid.minor = element_blank(),
   panel.grid.major.x = element_line(color = "grey90", linetype = "dotted", size = 0.3),
   panel.grid.major.y = element_line(color = "grey90", linetype = "solid", size = 0.5),
@@ -129,12 +130,14 @@ ggplot_theme = theme(
 
 # Using ggplot() to plot the ARIMA graph 
 arima_plot <- ggplot() +
+  annotate("rect", xmin = train_end_year + 0.5, xmax = Inf,
+           ymin = -Inf, ymax = Inf, alpha = 0.08, fill = "grey80") +  # Testing area
   annotate("text", x = (min_year + train_end_year) / 2, y = ymax_val, label = "Training",
-           vjust = -0.5, size = 4, color="#1f77b4") +
+           vjust = -0.5, size = 5, color="#1f77b4") +
   annotate("text", x = (train_end_year + 1 + max(actual_df$Year)) / 2, y = ymax_val, label = "Testing",
-           vjust = -0.5, size = 4, color="#137547") +
+           vjust = -0.5, size = 5, color="#137547") +
   # ACTUALS: color by Part + linetype by Part
-  geom_line(data = actual_df, aes(Year, Value, color = Part, linetype = Part), linewidth = 0.9) +
+  geom_line(data = actual_df, aes(Year, Value, color = Part), linewidth = 1) +
   geom_point(data = actual_df, aes(Year, Value, color = Part), shape = 17, size = 2.5) +   
   
   # MODEL: color by Series
@@ -142,23 +145,16 @@ arima_plot <- ggplot() +
   geom_point(data = model_df_plot, aes(Year, Value, color = Series), shape = 22, size = 2.5) +   
   
   # Split marker
-  geom_vline(xintercept = train_end_year + 0.5, linewidth = 0.4, alpha = 0.5) +
-  labs(title = "ARIMA: Fitted (Train) + Forecast vs Actual", x = "Year", y = "Yield") +
-  
-  # Linetypes for the Actuals
-  scale_linetype_manual(values = c("Actual (train)" = "solid",
-                                   "Actual (test)"  = "dashed")) +
+  geom_vline(xintercept = train_end_year + 0.5, linewidth = 0.4, alpha = 0.5, linetype = "dotted") +
+  labs(title = "ARIMA: Fitted (Train) + Forecast vs Actual Yield", x = "Year", y = "Yield") +
   
   # Colors for BOTH groups (union of levels from Part and Series)
   scale_color_manual(values = c(
-    "Actual (train)"        = "#0072B2",
-    "Actual (test)"         = "#56B4E9",
-    "ARIMA fitted (train)"  = "#009E73",
-    "ARIMA forecast"        = "#B2DF8A"
+    "Actual"                = "#0072B2",
+    "ARIMA fitted (train)"  = "#CB3E2D",
+    "ARIMA forecast"        = "#6AA84F"
   )) +
   
-  scale_linetype_manual(values = c("Actual (train)" = "solid", "Actual (test)" = "dashed"),
-                        guide = "none") + 
   theme_minimal(base_size = 14) + ggplot_theme
 
 # Saving the ARIMA plot 
@@ -283,13 +279,13 @@ test_years  <- as.integer(time(yield_test_ts))
 fit_years   <- as.integer(time(fitted(arimax_model)))
 fc_years    <- as.integer(time(arimax_forecast$mean))
 
-# Create a dataframe using tibble of actual values for plotting (train + test)
+# Create a dataframe using tibble of actual yield values for the whole period
 actual_df <- tibble(
-  Year  = c(train_years,            test_years),
-  Value = c(as.numeric(yield_train_ts), as.numeric(yield_test_ts)),
-  Part  = c(rep("Actual (train)", length(yield_train_ts)),
-            rep("Actual (test)",  length(yield_test_ts)))
-)
+  Year  = c(train_years, test_years),
+  Value = c(as.numeric(yield_train_ts), as.numeric(yield_test_ts))
+) %>%
+  arrange(Year) %>%
+  mutate(Part = "Actual")
 
 # Build a tidy data frame of MODEL values for plotting (fitted on train + forecast on test)
 model_df_plot <- tibble(
@@ -314,15 +310,19 @@ ymax_val <- max(c(actual_df$Value, model_df_plot$Value), na.rm = TRUE)
 
 # Using ggplot() to plot the ARIMA graph 
 arimax_plot <- ggplot() +
+  annotate("rect", xmin = train_end_year + 0.5, xmax = max(actual_df$Year) + 0.5,
+           ymin = -Inf, ymax = Inf, alpha = 0.08, fill = "grey80") +  # Testing area
+  annotate("rect", xmin = max(actual_df$Year) + 0.5 , xmax = Inf,
+           ymin = -Inf, ymax = Inf, alpha = 0.08, fill = "grey70") +  # Forecast area
   annotate("text", x = (min_year + train_end_year) / 2, y = ymax_val, label = "Training",
-           vjust = -0.5, size = 4, color="#1f77b4") +
+           vjust = -0.5, size = 5, color="#1f77b4") +
   annotate("text", x = (train_end_year + 1 + max(actual_df$Year)) / 2, y = ymax_val, label = "Testing",
-           vjust = -0.5, size = 4, color="#137547") +
-  annotate("text", x = (max(future_results$Harvest_Year)), y = ymax_val, label = "Forecast",
-           vjust = -0.5, size = 4, color="#DAA520") +
+           vjust = -0.5, size = 5, color="#CB3E2D") +
+  annotate("text", x = (max(future_results$Harvest_Year)) - 0.1, y = ymax_val, label = "Forecast",
+           vjust = -0.5, size = 5, color="#137547") +
   
   # ACTUALS: color by Part + linetype by Part
-  geom_line(data = actual_df, aes(Year, Value, color = Part, linetype = Part), linewidth = 1) +
+  geom_line(data = actual_df, aes(Year, Value, color = Part), linewidth = 1) +
   geom_point(data = actual_df, aes(Year, Value, color = Part), shape = 17, size = 2.5) +   
   
   # MODEL: color by Series
@@ -330,29 +330,22 @@ arimax_plot <- ggplot() +
   geom_point(data = model_df_plot, aes(Year, Value, color = Series), shape = 22, size = 2.5) +   
   
   # Future 3 years forecast 
-  geom_line(data = future_results, aes(Harvest_Year, Forecast_Yield, color = "Future Forecast"), , linewidth = 1) + 
+  geom_line(data = future_results, aes(Harvest_Year, Forecast_Yield, color = "Future Forecast"), , linewidth = 1, linetype="dashed") + 
   geom_point(data = future_results, aes(Harvest_Year, Forecast_Yield, color = "Future Forecast"), shape = 21, size = 2.5) +  
 
   # Split marker
-  geom_vline(xintercept = train_end_year + 0.5, linewidth = 0.4, alpha = 0.5) +
-  geom_vline(xintercept = max(model_df_plot$Year) + 0.5, linetype = "dashed") +
-  labs(title = "ARIMAX: Fitted (Train) + Forecast vs Actual", x = "Year", y = "Yield") +
-  
-  # Linetypes for the Actuals
-  scale_linetype_manual(values = c("Actual (train)" = "solid",
-                                   "Actual (test)"  = "dashed")) +
+  geom_vline(xintercept = train_end_year + 0.5, linewidth = 0.4, alpha = 0.5, linetype = "dotted") +
+  geom_vline(xintercept = max(model_df_plot$Year) + 0.5, linewidth = 0.4, linetype = "dashed") +
+  labs(title = "ARIMAX: Fitted (Train) + Forecast vs Actual Yield", x = "Year", y = "Yield") +
   
   # Colors for BOTH groups (union of levels from Part and Series)
   scale_color_manual(values = c(
-    "Actual (train)"         = "#0072B2",
-    "Actual (test)"          = "#56B4E9",
-    "ARIMAX fitted (train)"  = "#009E73",
-    "ARIMAX forecast (test)" = "#B2DF8A", 
-    "Future Forecast"        = "#FFD700" 
+    "Actual"                 = "#0072B2",
+    "ARIMAX fitted (train)"  = "#CB3E2D",
+    "ARIMAX forecast (test)" = "#F97306", 
+    "Future Forecast"        = "#8CBF26" 
   )) +
   
-  scale_linetype_manual(values = c("Actual (train)" = "solid", "Actual (test)" = "dashed"),
-                        guide = "none") + 
   theme_minimal(base_size = 14) + ggplot_theme 
 
 # Saving the ARIMAX plot 
@@ -380,9 +373,8 @@ test_df  <- explanatory_model %>%
   select(Harvest_Year, all_of(c(predictors, target))) %>%
   drop_na(all_of(c(predictors, target)))
 
-
 # ---------------------------
-# 2. RF Models Training & Hyperparameter Tuning
+# 2. RF Model Training & Hyperparameter Tuning
 # ---------------------------
 # Random Forest (ranger) — Strong CV + Wider Grid using caret
 # Goal: Find good hyperparameters with 10x repeated CV, then evaluate on test.
@@ -486,7 +478,10 @@ print(list(
   rf_test  = metrics_tbl(test_df[[target]],  pred_test)
 ))
 
-# Full-series predictions for plotting 
+# ---------------------------
+# 3. Plotting the Random Forest model for visualization  
+# ---------------------------
+
 df_plot_rf <- explanatory_model %>%
   select(Harvest_Year, all_of(c(predictors, target))) %>%
   mutate(Predictions = as.numeric(predict(rf_fit, newdata = ., na.action = na.pass))) %>%
@@ -504,12 +499,15 @@ randomforest_plot <-ggplot() +
             linewidth = 1, linetype = "dashed", na.rm = TRUE) +
   geom_point(data = df_plot_rf, aes(Harvest_Year, Predictions, color = "Random Forest Model"),
              shape = 17, size = 1.8, na.rm = TRUE) +
-  annotate("text", x = train_end_year - 1, y = y_max, label = "TRAIN", vjust = -0.3, size = 3.5, color="#1f77b4") +
-  annotate("text", x = test_start_year + 1, y = y_max, label = "TEST",  vjust = -0.3, size = 3.5, color="#137547") +
+  
+  annotate("text", x = (min_year + train_end_year) / 2, y = ymax_val, label = "Training",
+           vjust = -0.5, size = 5, color="#1f77b4") +
+  annotate("text", x = (train_end_year + 1 + max(actual_df$Year)) / 2, y = ymax_val, label = "Testing",
+           vjust = -0.5, size = 5, color="#137547") +
   scale_color_manual(values = c(
     "Observed"             = "#0072B2",
     "Random Forest Model"  = "#009E73")) +
-  labs(title = "Random Forest: Predictions vs Observed",
+  labs(title = "Random Forest: Predictions vs Observed Yield",
        subtitle = "80% Train (left) / 20% Test (right)",
        x = "Year", y = "Yield") +
   theme_minimal(base_size = 13) + ggplot_theme
@@ -524,13 +522,15 @@ ggsave(filename = file.path(result_folder, filename),
 # (D) Estimating Agricultural GDP from forecasted yield 
 # ---------------------------
 
-#11 Calculate future GDP impact based on predicted values
+# ---------------------------
+# 1. Calculate future Agriculture GDP share impact based on predicted values
+# ---------------------------
 
 # Obtaining the average value of the yield and Agriculture GDP share from the explanatory model 
 baseline_yield <- mean(explanatory_model$Yield_Value, na.rm = TRUE)
 avg_agri_share <- mean(explanatory_model$Agri_GDP_Share, na.rm = TRUE)
 
-
+# Predicting the future GDP values 
 future_results <- future_results %>%
   mutate(
     Yield_Change_pct = (Forecast_Yield - baseline_yield) / baseline_yield * 100,
@@ -539,8 +539,11 @@ future_results <- future_results %>%
     GDP_Impact_Upper = ((Upper_95 - baseline_yield) / baseline_yield * 100) * (avg_agri_share / 100)
   )
 
+# ---------------------------
+# 2. Plotting the resulting graph for the estimated Agricultural GDP share
+# ---------------------------
 gdp_pred <- ggplot(future_results, aes(x = Harvest_Year, y = GDP_Impact_pct)) +
-  geom_line(size = 1.3, color = "#1f78b4") +
+  geom_line(linewidth = 1.3, color = "#1f78b4") +
   geom_ribbon(aes(ymin = GDP_Impact_Lower, ymax = GDP_Impact_Upper),
               fill = "#1f78b4", alpha = 0.2) +
   labs(
