@@ -12,7 +12,6 @@ library("scales")
 library("ggrepel")
 library("outliers")
 library("e1071")
-library("psych") #used for descriptive analysis
 library("tidyr") #datasets
 library("DBI")
 library("RMariaDB")
@@ -21,6 +20,8 @@ library("rprojroot")
 root <- find_root(has_file(".Renviron"))
 readRenviron(file.path(root, ".Renviron"))
 
+descriptive_folder = get_script_dir()
+result_folder = file.path(descriptive_folder, "results")
 # Use the credentials to connect to our local database 
 con <- dbConnect(
   RMariaDB::MariaDB(),
@@ -98,9 +99,9 @@ trend_final <- plot_grid(
   trend_panel, legend_trend,
   ncol = 1, rel_heights = c(1, 0.08)
 )
-
-ggsave("sugarcane_trends_mauritius_1x3_combined.png",
-       plot = trend_final, width = 18, height = 6, dpi = 300)
+filename = "sugarcane_trends_mauritius_1x3_combined.png"
+ggsave(filename = file.path(result_folder, filename), plot = trend_final,
+       width = 18, height = 6, dpi = 300)
 
 # ========================================================= #
 # --- 2. HISTOGRAM PLOTS ---
@@ -153,12 +154,17 @@ hist_final <- plot_grid(
   ncol = 1, rel_heights = c(1, 0.08)
 )
 
-ggsave("sugarcane_distributions_mauritius_1x3_combined.png",
-       plot = hist_final, width = 18, height = 6, dpi = 300)
+filename = "sugarcane_distributions_mauritius_1x3_combined.png"
+ggsave(filename = file.path(result_folder, filename), plot = trend_final,
+       width = 18, height = 6, dpi = 300)
 
 
 # ========================================================= #
 cat("\n✅ Saved combined figures with unified legends and dashed moving averages:\n")
 cat("- sugarcane_trends_mauritius_1x3_combined.png\n")
 cat("- sugarcane_distributions_mauritius_1x3_combined.png\n")
+
+
+
+
 
