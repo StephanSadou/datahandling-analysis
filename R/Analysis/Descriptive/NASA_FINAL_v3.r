@@ -23,6 +23,7 @@ library("rprojroot")
 # ---- Output directory (ensures files are saved in a known location) -------------------------------
 dir_stage <- file.path(getwd(), "outputs")         # define an "outputs" folder under current wd
 if (!dir.exists(dir_stage)) dir.create(dir_stage, recursive = TRUE)  # create folder (with full directory) if missing
+descriptive_folder = get.script.dir()
 result_folder = file.path(descriptive_folder, "results")
 # Read the environment file to obtain the database credentials 
 root <- find_root(has_file(".Renviron"))
@@ -742,6 +743,7 @@ humid_trends_split <- compute_trends_split(seasonal_hum, "Humidity", periods_spl
 View(humid_trends_split)  
 
 #======================-----------END OF NASA SCRIPT---------======================#
+
 
 
 
