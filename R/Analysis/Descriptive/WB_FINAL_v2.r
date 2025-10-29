@@ -169,94 +169,9 @@ ggplot(plot_df, aes(x = d_GDP, y = Ag_YoY, color = Metric)) +
   )
 
 
-#test3 
-fit_with_stats <- function(tbl, y_col) {
-  # Build formula: <metric> ~ d_GDP
-  f  <- as.formula(paste(y_col, "~ d_GDP"))
-  m  <- lm(f, data = tbl)
-  
-  # Robust (HC3) slope test
-  ct <- lmtest::coeftest(m, vcov = sandwich::vcovHC(m, type = "HC3")) |>
-    broom::tidy()
-  
-  # Keep the slope row and compute robust 95% CI
-  slope <- ct |> dplyr::filter(term == "d_GDP")
-  tcrit <- qt(0.975, df = m$df.residual)
-  ci_lo <- slope$estimate - tcrit * slope$std.error
-  ci_hi <- slope$estimate + tcrit * slope$std.error
-  
-  tibble::tibble(
-    Slope_pp_per_pp = slope$estimate,                  # It tells you how many percentage points the agricultural YoY change moves when GDP YoY moves by 1 percentage point.
-    CI_low_95       = ci_lo,
-    CI_high_95      = ci_hi,
-    p_value         = slope$p.value,
-    R2              = summary(m)$r.squared,
-    n               = nobs(m)
-  )
-}
-
-# 2) Build a long table (so we can group by Metric the same way you grouped Season)
-yoy_long <- df_yoy %>%
-  select(Year, d_GDP, d_Yield, d_Production, d_Area) %>%
-  pivot_longer(
-    cols = c(d_Yield, d_Production, d_Area),
-    names_to  = "Metric_col",
-    values_to = "Ag_YoY"
-  ) %>%
-  mutate(
-    Metric = recode(Metric_col,
-                    d_Yield      = "Yield YoY (%)",
-                    d_Production = "Production YoY (%)",
-                    d_Area       = "Area Harvested YoY (%)")
-  )
-
-# 3) Period runner in the same "fit_season_period" style -----------------------
-fit_metric_period <- function(long_tbl, y_start, y_end) {
-  long_tbl %>%
-    filter(Year >= y_start, Year <= y_end) %>%
-    group_by(Metric) %>%                                    # like Season in your code
-    group_modify(~ fit_with_stats(.x, y_col = "Ag_YoY")) %>%
-    ungroup() %>%
-    mutate(Period = paste0(y_start, "–", y_end)) %>%
-    select(Period, Metric, everything())
-}
-
-# 4) Run for your split periods (adjust years to your data coverage) -----------
-# Note: first YoY year is usually min(df_yoy$Year). Use that instead of hard-coding.
-first_yoy <- min(df_yoy$Year, na.rm = TRUE)   # typically 1982
-last_yoy  <- max(df_yoy$Year, na.rm = TRUE)   # e.g., 2023
-
-by_metric_81_03 <- fit_metric_period(yoy_long, y_start = max(1981, first_yoy), y_end = 2003)
-by_metric_04_24 <- fit_metric_period(yoy_long, y_start = 2004, y_end = min(2024, last_yoy))
-by_metric_full  <- fit_metric_period(yoy_long, y_start = first_yoy, y_end = last_yoy)
-
-# 5) Bind and present—rounded, ordered, same style as your solar table ---------
-ag_gdp_trends_split <- bind_rows(by_metric_81_03, by_metric_04_24) %>%
-  mutate(
-    Slope_pp_per_pp = round(Slope_pp_per_pp, 6),
-    CI_low_95       = round(CI_low_95, 6),
-    CI_high_95      = round(CI_high_95, 6),
-    R2              = round(R2, 3),
-    p_value         = signif(p_value, 3)
-  ) %>%
-  arrange(Metric, Period)
-
-ag_gdp_trends_full <- by_metric_full %>%
-  mutate(
-    Slope_pp_per_pp = round(Slope_pp_per_pp, 6),
-    CI_low_95       = round(CI_low_95, 6),
-    CI_high_95      = round(CI_high_95, 6),
-    R2              = round(R2, 3),
-    p_value         = signif(p_value, 3)
-  ) %>%
-  arrange(Metric, Period)
-
-# View tables (matches your "view(...)" style)
-view(ag_gdp_trends_split)
-view(ag_gdp_trends_full)
-
 
 #======================-----------END OF GDP SCRIPT---------======================#
+
 
 
 
