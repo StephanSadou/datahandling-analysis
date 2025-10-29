@@ -23,7 +23,7 @@ library("rprojroot")
 # ---- Output directory (ensures files are saved in a known location) -------------------------------
 dir_stage <- file.path(getwd(), "outputs")         # define an "outputs" folder under current wd
 if (!dir.exists(dir_stage)) dir.create(dir_stage, recursive = TRUE)  # create folder (with full directory) if missing
-result_folder = file.path(predictive_folder, "results")
+result_folder = file.path(descriptive_folder, "results")
 # Read the environment file to obtain the database credentials 
 root <- find_root(has_file(".Renviron"))
 readRenviron(file.path(root, ".Renviron"))
@@ -126,7 +126,6 @@ p_humidity <- plot_trend(nasa_annual, "Humidity_percent", "Humidity (%)",
 trend_combined <- grid.arrange(p_temp, p_rain, p_solar, p_humidity, ncol = 2)
 trend_png_path <- file.path(result_folder, "nasa_trend_profiles.png")
 ggsave(filename = trend_png_path, plot = trend_combined, width = 12, height = 8, dpi = 300)
-
 cat(paste0("\n📈 Trend plots saved to: ", trend_png_path, "\n"))
 
 ##########################Seasonal Profiles ---
@@ -743,6 +742,7 @@ humid_trends_split <- compute_trends_split(seasonal_hum, "Humidity", periods_spl
 View(humid_trends_split)  
 
 #======================-----------END OF NASA SCRIPT---------======================#
+
 
 
 
