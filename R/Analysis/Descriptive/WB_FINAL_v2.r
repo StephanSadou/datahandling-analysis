@@ -24,7 +24,7 @@ if (!require("lmtest")) install.packages("lmtest"); library("lmtest")
 # Read the environment file to obtain the database credentials 
 root <- find_root(has_file(".Renviron"))
 readRenviron(file.path(root, ".Renviron"))
-result_folder = file.path(predictive_folder, "results")
+result_folder = file.path(descriptive_folder, "results")
 # Use the credentials to connect to our local database 
 con <- dbConnect(
   RMariaDB::MariaDB(),
@@ -256,5 +256,6 @@ view(ag_gdp_trends_full)
 
 
 #======================-----------END OF GDP SCRIPT---------======================#
+
 
 
