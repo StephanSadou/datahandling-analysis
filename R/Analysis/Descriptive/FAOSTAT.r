@@ -20,6 +20,8 @@ library("rprojroot")
 root <- find_root(has_file(".Renviron"))
 readRenviron(file.path(root, ".Renviron"))
 
+descriptive_folder = get_script_dir()
+result_folder = file.path(descriptive_folder, "results")
 # Use the credentials to connect to our local database 
 con <- dbConnect(
   RMariaDB::MariaDB(),
@@ -161,6 +163,7 @@ ggsave(filename = file.path(result_folder, filename), plot = trend_final,
 cat("\n✅ Saved combined figures with unified legends and dashed moving averages:\n")
 cat("- sugarcane_trends_mauritius_1x3_combined.png\n")
 cat("- sugarcane_distributions_mauritius_1x3_combined.png\n")
+
 
 
 
