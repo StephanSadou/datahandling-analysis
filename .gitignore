@@ -2,6 +2,6 @@
 .Rhistory
 .RData
 .Ruserdata
-.Renviron
+R/.Renviron
 data_raw/
 data_stage/
