@@ -32,7 +32,6 @@ required_packages <- c(
   "reshape2",   # Reshape long<->wide
   "jsonlite",   # JSON parsing & writing
   "sandwich",   # Robust covariance (sandwich) estimators
-  "Rgraphiz",   # Graphviz bindings for graph viz
   "outliers",   # Outlier detection utilities
   "patchwork",  # Compose multiple ggplots
   "rprojroot",  # Project-root discovery
