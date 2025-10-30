@@ -25,11 +25,8 @@ result_folder = file.path(predictive_folder, "results")
 # 1. Load the model produced in the explanatory analysis 
 # --------------------------- 
 # Read Explanatory model from Explanatory analysis folder  
-# explanatory_model <- read_csv(file.path(predictive_folder, "../Explanatory/model.csv)) 
-
-explanatory_model <- read_csv(
-  "https://raw.githubusercontent.com/StephanSadou/datahandling-analysis/main/R/Analysis/GAM_model.csv"
-) %>% arrange(Harvest_Year)
+explanatory_folder <- file.path(predictive_folder, "../Explanatory") 
+explanatory_model <- read_csv(file.path(explanatory_folder, "results", "GAM_model.csv")) %>% arrange(Harvest_Year)
 
 # ---------------------------
 # 2. Create time-series dataset based on real yield values: 
@@ -121,10 +118,10 @@ ggplot_theme = theme(
   legend.position = "top",
   legend.title = element_blank(),
   panel.grid.minor = element_blank(),
-  panel.grid.major.x = element_line(color = "grey90", linetype = "dotted", size = 0.3),
-  panel.grid.major.y = element_line(color = "grey90", linetype = "solid", size = 0.5),
-  panel.border = element_rect(color = "grey70", fill = NA, size = 0.5),
-  axis.line = element_line(color = "black", size = 0.6),
+  panel.grid.major.x = element_line(color = "grey90", linetype = "dotted", linewidth = 0.3),
+  panel.grid.major.y = element_line(color = "grey90", linetype = "solid", linewidth = 0.5),
+  panel.border = element_rect(color = "grey70", fill = NA, linewidth = 0.5),
+  axis.line = element_line(color = "black", linewidth = 0.6),
   plot.margin = margin(t = 10, r = 20, b = 10, l = 10)
 )
 
