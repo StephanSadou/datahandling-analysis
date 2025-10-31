@@ -18,8 +18,9 @@ library(doParallel)
 # 0. Getting current path of predictive analysis folder 
 # ---------------------------
 source("get_cwd.R") # Invoke script from root project folder 
-predictive_folder = get_script_dir()
-result_folder = file.path(predictive_folder, "results")
+cwd <- get_script_dir()
+predictive_folder <- file.path(cwd, 'Analysis', "Predictive")
+result_folder <- file.path(predictive_folder, "results")
 
 # ---------------------------
 # 1. Load the model produced in the explanatory analysis 

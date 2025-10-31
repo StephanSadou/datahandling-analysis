@@ -11,7 +11,6 @@ required_packages <- c(
   "broom",      # Tidy model outputs (data frames)
   "arrow",      # Arrow/Parquet columnar I/O
   "e1071",      # ML algorithms (e.g., SVM, Naive Bayes)
-  "graph",      # Graph data structures
   "dplyr",      # Data manipulation grammar
   "tidyr",      # Tidy reshaping (pivot/unnest)
   "readr",      # Fast, friendly CSV/TSV import
