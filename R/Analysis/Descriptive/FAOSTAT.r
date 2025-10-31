@@ -16,6 +16,8 @@ library("tidyr") #datasets
 library("DBI")
 library("RMariaDB")
 library("rprojroot")
+
+source("get_cwd.R")
 # Read the environment file to obtain the database credentials 
 root <- find_root(has_file(".Renviron"))
 readRenviron(file.path(root, ".Renviron"))
@@ -54,6 +56,9 @@ sugarcane_prod <- sugarcane_prod %>%
 mauritius_area <- mauritius_area %>%
   mutate(Moving_Avg = rollmean(Area_Harvested, k = 3, fill = NA, align = "right"))
 
+view(mauritius_yield)
+view(sugarcane_prod)
+view(mauritius_area)
 # ========================================================= #
 # --- 1. TREND PLOTS ---
 # ========================================================= #
@@ -99,9 +104,13 @@ trend_final <- plot_grid(
   trend_panel, legend_trend,
   ncol = 1, rel_heights = c(1, 0.08)
 )
-filename = "sugarcane_trends_mauritius_1x3_combined.png"
-ggsave(filename = file.path(result_folder, filename), plot = trend_final,
-       width = 18, height = 6, dpi = 300)
+
+ggsave(
+  filename = "sugarcane_trends_mauritius_1x3_combined.png",
+  path     = result_folder,
+  plot     = trend_final,
+  width    = 18, height = 6, dpi = 300
+)
 
 # ========================================================= #
 # --- 2. HISTOGRAM PLOTS ---
@@ -154,17 +163,16 @@ hist_final <- plot_grid(
   ncol = 1, rel_heights = c(1, 0.08)
 )
 
-filename = "sugarcane_distributions_mauritius_1x3_combined.png"
-ggsave(filename = file.path(result_folder, filename), plot = trend_final,
-       width = 18, height = 6, dpi = 300)
+ggsave(
+  filename = "sugarcane_distributions_mauritius_1x3_combined.png",
+  path     = result_folder,
+  plot     = hist_final,
+  width    = 18, height = 6, dpi = 300
+)
+
 
 
 # ========================================================= #
-cat("\n✅ Saved combined figures with unified legends and dashed moving averages:\n")
+cat("\n Saved combined figures with unified legends and dashed moving averages:\n")
 cat("- sugarcane_trends_mauritius_1x3_combined.png\n")
 cat("- sugarcane_distributions_mauritius_1x3_combined.png\n")
-
-
-
-
-
