@@ -18,7 +18,6 @@ required_packages <- c(
   "ranger",     # Fast Random Forests
   "scales",     # Axis/label scaling helpers
   "energy",     # Energy statistics (e.g., distance correlation)
-  "gratia",     # GAM diagnostics & plots
   "lmtest",     # Tests for linear models
   "Metrics",    # Model evaluation metrics (RMSE/MAE/…)
   "FAOSTAT",    # FAO datasets access
