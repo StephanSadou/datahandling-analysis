@@ -25,7 +25,9 @@ source("get_cwd.R")
 # Read the environment file to obtain the database credentials 
 root <- find_root(has_file(".Renviron"))
 readRenviron(file.path(root, ".Renviron"))
-descriptive_folder = get_script_dir()
+
+cwd <- get_script_dir() 
+descriptive_folder = file.path(cwd, "Analysis", "Descriptive")
 result_folder = file.path(descriptive_folder, "results")
 # Use the credentials to connect to our local database 
 con <- dbConnect(

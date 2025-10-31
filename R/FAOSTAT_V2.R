@@ -133,8 +133,6 @@ filter(Item=="Sugar cane")%>%             #Based on pie chart, Sugar cane contri
 filter(Year>=1981) %>%                         #To align with other 3 datasets
 select(Item,Year,Area_harvested,Production,Yield)
 
-View(crops)
-
 # Saved our results into a csv file 
 cleansed_csv_path <- file.path(dir_stage, "FAOSTAT_stageV2.csv")
 data.table::fwrite(crops, cleansed_csv_path)
