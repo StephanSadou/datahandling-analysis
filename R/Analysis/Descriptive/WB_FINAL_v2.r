@@ -21,6 +21,7 @@ if (!require("lmtest")) install.packages("lmtest"); library("lmtest")
 
 # ---Step 1 : Database connection 
 
+source("get_cwd.R")
 # Read the environment file to obtain the database credentials 
 root <- find_root(has_file(".Renviron"))
 readRenviron(file.path(root, ".Renviron"))
@@ -34,6 +35,7 @@ con <- dbConnect(
   user = Sys.getenv("DB_USER"),
   password = Sys.getenv("DB_PASSWORD")
 )
+
 # --- Step 2: Data Pulling ---
 GDP_DATA <- dbReadTable(con, "current_compiled_data") %>% arrange(Climate_Year)
 
@@ -74,9 +76,9 @@ GDP <- ggplot(agro_long, aes(x = year, y = Value, color = Series, linetype = Ser
 # --- Step 6: Display and Save ---
 print(GDP)
 
-filename = "agriculture_gdp_trend_mauritius.png"
-ggsave(file.path(result_folder, filename), plot = trend_final,
-       width = 18, height = 6, dpi = 300)
+ggsave(filename = "agriculture_gdp_trend_mauritius.png",path=result_folder,plot= GDP,width = 8, height = 5, dpi = 300)
+
+
 
 #%change in agricultural variables vs %change in GDP 
 # ---------- 1) Compute YoY % changes (single source of truth) ----------
@@ -128,7 +130,7 @@ x_max <- ceiling(max(plot_df$d_GDP,  na.rm = TRUE) / 5) * 5
 y_min <- floor(min(plot_df$Ag_YoY,   na.rm = TRUE) / 5) * 5
 y_max <- ceiling(max(plot_df$Ag_YoY, na.rm = TRUE) / 5) * 5
 
-ggplot(plot_df, aes(x = d_GDP, y = Ag_YoY, color = Metric)) +
+percentage_change<-ggplot(plot_df, aes(x = d_GDP, y = Ag_YoY, color = Metric)) +
   # zero-reference lines (thin + subtle)
   geom_hline(yintercept = 0, linetype = "dashed", linewidth = 0.3) +
   geom_vline(xintercept = 0, linetype = "dashed", linewidth = 0.3) +
@@ -145,13 +147,13 @@ ggplot(plot_df, aes(x = d_GDP, y = Ag_YoY, color = Metric)) +
     breaks = seq(x_min, x_max, by = 5),
     labels = function(x) paste0(x, "%"),
     limits = c(x_min, x_max)
-    ) +
+  ) +
   scale_y_continuous(
     "Agriculture YoY change (%)",
     breaks = seq(y_min, y_max, by = 5),
     labels = function(x) paste0(x, "%"),
     limits = c(y_min, y_max)
-    ) +
+  ) +
   
   labs(
     title = "Agricultural Changes vs GDP Change ",
@@ -167,14 +169,8 @@ ggplot(plot_df, aes(x = d_GDP, y = Ag_YoY, color = Metric)) +
     plot.title.position = "plot" ,                            # nicer spacing (optional)
     legend.text = element_text(size = 12)
   )
-
+percentage_change
+ggsave(filename = "sugarcane_changes_vs_GDP.png",path=result_folder,plot= percentage_change,width = 8, height = 5, dpi = 300)
 
 
 #======================-----------END OF GDP SCRIPT---------======================#
-
-
-
-
-
-
-
