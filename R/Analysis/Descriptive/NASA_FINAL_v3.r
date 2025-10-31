@@ -1,4 +1,4 @@
-#=================-----------NASA POWER SEASONAL & TREND ANALYSIS---------=================#
+#=================-----------NASA: SEASONAL & TREND ANALYSIS---------=================#
 
 # --- Libraries ---
 library("ggplot2") #plots
@@ -21,16 +21,12 @@ library("RMariaDB") #SQL database connection
 library("gridExtra")
 library("rprojroot")
 # ---- Output directory (ensures files are saved in a known location) -------------------------------
-dir_stage <- file.path(getwd(), "outputs")         # define an "outputs" folder under current wd
-if (!dir.exists(dir_stage)) dir.create(dir_stage, recursive = TRUE)  # create folder (with full directory) if missing
-
-descriptive_folder = get_script_dir()
-result_folder = file.path(descriptive_folder, "results")
-
+source("get_cwd.R")
 # Read the environment file to obtain the database credentials 
 root <- find_root(has_file(".Renviron"))
 readRenviron(file.path(root, ".Renviron"))
-
+descriptive_folder = get_script_dir()
+result_folder = file.path(descriptive_folder, "results")
 # Use the credentials to connect to our local database 
 con <- dbConnect(
   RMariaDB::MariaDB(),
@@ -40,14 +36,6 @@ con <- dbConnect(
   password = Sys.getenv("DB_PASSWORD")
 )
 
-# Create a safe connection
-con <- dbConnect(
-  RMariaDB::MariaDB(),
-  dbname = db_name,
-  host = db_host,
-  user = db_user,
-  password = db_password
-)
 
 final_nasa <- dbReadTable(con, "climate")
 # Parse date column
@@ -98,7 +86,7 @@ trend_summary <- lapply(trend_models, function(model) {
 
 # Save trend summary
 
-print(trend_summary)
+view(trend_summary)
 
 ##########################Create Trend Plots with 3-Year Moving Average ---
 plot_trend <- function(df, yvar, ylabel, title, color) {
@@ -127,9 +115,13 @@ p_humidity <- plot_trend(nasa_annual, "Humidity_percent", "Humidity (%)",
 
 ##########################Combine and Save Trend Plots ---
 trend_combined <- grid.arrange(p_temp, p_rain, p_solar, p_humidity, ncol = 2)
-trend_png_path <- file.path(result_folder, "nasa_trend_profiles.png")
-ggsave(filename = trend_png_path, plot = trend_combined, width = 12, height = 8, dpi = 300)
-cat(paste0("\n📈 Trend plots saved to: ", trend_png_path, "\n"))
+ggsave(
+  filename = "nasa_trend_profiles.png",
+  path     = result_folder,
+  plot     = trend_combined,
+  width    = 18, height = 6, dpi = 300
+)
+
 
 ##########################Seasonal Profiles ---
 nasa_seasonal <- nasa_monthly %>%
@@ -162,9 +154,12 @@ p4 <- plot_seasonal(nasa_seasonal, "Solar_radiation_kWh_m2_mean", "Solar_radiati
                     "Solar Radiation (kWh/m²)", "Seasonal Profile: Solar Radiation", "#f2a541")
 
 seasonal_combined <- grid.arrange(p1, p2, p3, p4, ncol = 2)
-seasonal_png_path <- file.path(result_folder, "nasa_seasonal_profiles.png")
-ggsave(filename = seasonal_png_path, plot = seasonal_combined, width = 12, height = 8, dpi = 300)
-
+ggsave(
+  filename = "nasa_seasonal_profiles.png",
+  path     = result_folder,
+  plot     = seasonal_combined,
+  width    = 18, height = 6, dpi = 300
+)
 
 ##########################Dataframe for 4 variables  ---
 df <- final_nasa %>% select(
@@ -197,7 +192,7 @@ plot_frequency <- Rain_df %>%
   theme_minimal() +
   theme(legend.position = "none",
         plot.title   = element_text(hjust = 0.5, face = "bold", size = 18, margin = margin(b = 5)), # Title style
-)
+  )
 
 
 #Violin plot of Rainy days
@@ -217,12 +212,21 @@ plot_intensity <- Rain_df %>%
   theme_minimal() +
   theme(legend.position = "none",
         plot.title   = element_text(hjust = 0.5, face = "bold", size = 18, margin = margin(b = 5)), # Title style
-)
+  )
 
 #Combining both rainy days plot
-combined_plots <- plot_frequency / plot_intensity # Uses patchwork for side-by-side or stacked plots
+combined_plots <- plot_frequency / plot_intensity # Uses patchwork for stacked plots
 
-combined_plots
+combined_plots 
+
+ggsave(
+  filename = "Rainy_days_profiles.png",
+  path     = result_folder,
+  plot     = combined_plots,
+  width    = 18, height = 6, dpi = 300
+)
+
+
 
 #Define the different seasons for sugarcane cycles --> Plantation,Growth and Maturation for daily data as data is yearly in SQL
 df$Month <- as.numeric(format(as.Date(df$Date), "%m"))
@@ -232,9 +236,9 @@ df$Season <- ifelse(df$Month >= 7 & df$Month <= 9, "Plantation",
                            ifelse(df$Month >= 4 & df$Month <= 6, "Maturation", NA)))
 
 # Separate data by season
-Plantation_data <- df[df$Season == "Plantation", ]
-Growth_data <- df[df$Season == "Growth", ]
-Maturation_data <- df[df$Season == "Maturation", ]
+Plantation_data <- df%>%filter(Season == "Plantation")
+Growth_data <- df%>%filter(Season == "Growth")
+Maturation_data <- df%>%filter(Season == "Maturation")
 
 
 ##########################Plotting trends by cycles ---
@@ -260,8 +264,10 @@ summary_stats <- df %>%
 
 view(summary_stats)
 
-##########################For stats/trends per season
-# Fits Value ~ Year for each Season and Variable
+##########################Trend values by cycles ---
+# Fits Value and Year for each Season and Variable (One Season-Year-Variable per line grouped in the same model)
+
+
 trend_summary_season <- summary_stats %>%
   pivot_longer(                     #reshaping: one row per Season-Year-Variable so that all variables can be fitted in the same model
     cols = c(Temp_Mean,
@@ -273,9 +279,9 @@ trend_summary_season <- summary_stats %>%
   ) %>%
   group_by(Season, Var) %>%
   summarise(
-    n_years        = n(),                                             # number of annual points
+    n_years        = n(),                                             # number of years
     Trend_per_year = coef(lm(Value ~ Year))[2],                              #take 2nd element , the slope, as 1st element is intercept
-    P_value        = summary(lm(Value ~ Year))$coefficients["Year","Pr(>|t|)"],   #indexes row for year and column for P-value
+    P_value        = summary(lm(Value ~ Year))$coefficients["Year","Pr(>|t|)"],   #2*4 matrix,indexes row for year and column for P-value with no linear trend
     R2             = summary(lm(Value ~ Year))$r.squared,                    # goodness of fit
     .groups = "drop"
   ) %>%
@@ -304,19 +310,19 @@ CYCLE_SHAPES <- c(                          # shapes per season
   "Growth"     = 22,
   "Maturation" = 24
 )
- #function1
+#function1
 plot_cycle_trend_from_summary <- function(          
-  summary_stats,                                    # Data frame that must contain Season, Year, and a numeric y-variable
-  yvar,                                             # y-variable 
-  ylab,                                             #  y-axis label
-  title,                                            # String: plot title
-  subtitle,                                         #  subtitle 
-  colors = CYCLE_COLORS,                            # Named vector of colors for seasons 
-  shapes = CYCLE_SHAPES,                            # Named vector of point shapes for seasons
-  y_step = 0.5,                                     # step size for y-axis 
-  y_pad  = 0.2,                                     # small padding added to min/max for better visual
-  x_by   = 2,                                       # distance of xaxis values
-  caption = "Sugarcane cycles: Plantation (Jul–Sep), Growth (Oct–Mar), Maturation (Apr–Jun). LOESS ±95% CI." # Caption text
+    summary_stats,                                    # Data frame that must contain Season, Year, and a numeric y-variable
+    yvar,                                             # y-variable 
+    ylab,                                             #  y-axis label
+    title,                                            # String: plot title
+    subtitle,                                         #  subtitle 
+    colors = CYCLE_COLORS,                            # Named vector of colors for seasons 
+    shapes = CYCLE_SHAPES,                            # Named vector of point shapes for seasons
+    y_step = 0.5,                                     # step size for y-axis 
+    y_pad  = 0.2,                                     # small padding added to min/max for better visual
+    x_by   = 2,                                       # distance of xaxis values
+    caption = "Sugarcane cycles: Plantation (Jul–Sep), Growth (Oct–Mar), Maturation (Apr–Jun). LOESS ±95% CI." # Caption text
 ){
   y_min <- min(summary_stats[[yvar]], na.rm = TRUE) 
   y_max <- max(summary_stats[[yvar]], na.rm = TRUE) 
@@ -388,6 +394,7 @@ g_temp <- plot_cycle_trend_from_summary(
 )
 print(g_temp)
 
+
 # 2) Rainfall
 g_rain <- plot_cycle_trend_from_summary(        
   summary_stats = summary_stats,
@@ -409,9 +416,9 @@ g_hum <- plot_cycle_trend_from_summary(
 print(g_hum)
 
 # 4) Solar (filter early years with poor data, as in your script)
-summary_stats_solar <- summary_stats %>% dplyr::filter(Year >= 1984)
-g_solar <- plot_cycle_trend_unified(
-  df = summary_stats_solar,
+summary_stats_solar <- summary_stats %>%filter(Year >= 1984)
+g_solar <- plot_cycle_trend_from_summary(
+  summary_stats = summary_stats_solar,
   yvar = "Mean_solar",
   ylab = "Mean Solar Radiation (kWh/m²)",
   title = "Annual Mean Solar Radiation Trends by Sugarcane Production Cycles (1984–2024)",
@@ -420,40 +427,34 @@ g_solar <- plot_cycle_trend_unified(
 
 #print(g_solar)
 
-ggsave(file.path(result_folder, "trend_cycles_temp.png"),  g_temp,  width = 12, height = 8, dpi = 300)
-ggsave(file.path(result_folder, "trend_cycles_rain.png"),  g_rain,  width = 12, height = 8, dpi = 300)
-ggsave(file.path(result_folder, "trend_cycles_hum.png"),   g_hum,   width = 12, height = 8, dpi = 300)
-ggsave(file.path(result_folder, "trend_cycles_solar.png"), g_solar, width = 12, height = 8, dpi = 300)
 
-
-
-
+ggsave(filename = "trend_cycles_temp.png",path=result_folder,plot= g_temp,width = 12, height = 8, dpi = 300)
+ggsave(filename = "trend_cycles_rain.png",path=result_folder,plot= g_rain,width = 12, height = 8, dpi = 300)
+ggsave(filename = "trend_cycles_humidity.png",path=result_folder,plot= g_hum,width = 12, height = 8, dpi = 300)
+ggsave(filename = "trend_cycles_solar.png",path=result_folder,plot= g_solar,width = 12, height = 8, dpi = 300)
 
 
 #2ND FUNCTION FOR DENSITY PLOTS
 plot_cycle_density_with_pooled <- function(            
-  df,                                                  # Daily-level data 
-  xvar,                                                # column name for x-axis
-  title,                                               
-  xlab,                                                
-  subtitle=NULL,                                            # subtitle
-  pooled_df = NULL,                                    # Optional: precomputed pooled means per Season (daily means)
-  mean_col  = "Mean",                                  # Name of the column in pooled_df containing the mean
-  units = "",                                          
-  colors = CYCLE_COLORS,                               
-  x_limits = NULL,                                     # Optional x-axis limits c(min, max)-mostly for rainfall
-  x_breaks  = NULL                                     # Optional vector of x-axis breaks-ostly for rainfall
+    df,                                                  # Daily-level data 
+    xvar,                                                # column name for x-axis
+    title,                                               
+    xlab,                                                
+    subtitle=NULL,                                            # subtitle
+    pooled_df = NULL,                                    # pooled means per Season 
+    mean_col  = "Mean",                                  # Name of the column in pooled_df containing the mean
+    units = "",                                          
+    colors = CYCLE_COLORS,                               
+    x_limits = NULL,                                     # Optional x-axis limits c(min, max)-mostly for rainfall
+    x_breaks  = NULL                                     # Optional vector of x-axis breaks-ostly for rainfall
 ){
- 
   
-  if (is.null(pooled_df)) {                            # If user didn’t supply pooled means…
-    pooled_df <- df %>%                                # …compute pooled daily mean per Season from df directly
-      dplyr::group_by(Season) %>%
-      dplyr::summarise(!!mean_col := mean(.data[[xvar]], na.rm = TRUE),
-                       .groups = "drop")
-  } else {
-    stopifnot(all(c("Season", mean_col) %in% names(pooled_df))) # Ensure provided pooled_df has needed columns
-  }
+  
+  pooled_df <- df %>%                                #compute pooled daily mean per Season from df directly
+    dplyr::group_by(Season) %>%
+    dplyr::summarise(!!mean_col := mean(.data[[xvar]], na.rm = TRUE),
+                     .groups = "drop")
+  
   
   density_peaks <- df %>%                              # Compute density peak height per Season for label placement
     dplyr::group_by(Season) %>%
@@ -461,7 +462,7 @@ plot_cycle_density_with_pooled <- function(
       y_peak = {                                       # For each Season, get max density height (for annotation y)
         v <- .data[[xvar]]                             # Extract the vector for this Season
         v <- v[is.finite(v)]                           # Drop non-finite values (NA, Inf)
-        if (length(v) > 1) max(stats::density(v)$y) else NA_real_  # Density only valid with >1 data point
+        if (length(v) > 1) max(stats::density(v)$y) else NA_real_  # Density only valid with >1 data point ; crosschecking whether data is ok or not
       },
       .groups = "drop"
     )
@@ -469,7 +470,7 @@ plot_cycle_density_with_pooled <- function(
   anno <- pooled_df %>%                                # Build annotation frame combining pooled means and peaks
     dplyr::left_join(density_peaks, by = "Season") %>%
     dplyr::mutate(
-      y_label = 0.7 * y_peak,                         # Place text slightly below the peak (95% of peak height)
+      y_label = 0.7 * y_peak,                         # Place text slightly below the peak (70% of peak height)
       label   = sprintf("Mean: %.1f%s", .data[[mean_col]], units) # Text like "Mean: 24.6°C"
     )
   
@@ -524,14 +525,14 @@ plot_cycle_density_with_pooled <- function(
 
 
 
-# Temperature density (uses pooled daily means computed internally unless you pass pooled_df)
+# Temperature density 
 g_temp_density <- plot_cycle_density_with_pooled(
   df      = df,                                        # Daily data frame with Season and DTemp
   xvar    = "DTemp",                                   # Column to plot on x-axis
   title   = "Distribution of Daily Temperatures by Cycle",   # Title
   subtitle= "Distinct temperature ranges across production phases", # Subtitle
   xlab    = "Daily Temperature (°C)",                  # X-axis label
-  units   = "°C"                                       # Units appended to mean labels
+  units   = "°C"                                       # Unit for mean labels
 )
 print(g_temp_density)
 skewness(Plantation_data$DTemp)
@@ -548,9 +549,9 @@ g_rain_density <- plot_cycle_density_with_pooled(
   title    = "Distribution of Daily Rainfall by Season (1981–2024)", # Title
   subtitle = "Right-skewed distributions: many low-rain days with occasional heavy events.", # Subtitle
   xlab     = "Rainfall (mm)",                          # X-axis label
-  units    = " mm",                                    # Units appended to mean labels (note space before mm)
+  units    = " mm",                                    # Units appended to mean labels
   x_limits = c(0, 5),                                  # Fix axis to 0–5 mm
-  x_breaks = seq(0, 15, by = 1)                        # Show ticks every 1 mm (even beyond limits for consistency)
+  x_breaks = seq(0, 15, by = 1)                        # Show ticks every 1 mm 
 )
 print(g_rain_density)
 skewness(Plantation_data$DRain)
@@ -562,14 +563,14 @@ kurtosis(Maturation_data$DRain)
 
 #Humidity Density Plot 
 
-# Temperature density (uses pooled daily means computed internally unless you pass pooled_df)
+# Humidity density 
 g_humidity_density <- plot_cycle_density_with_pooled(
-  df      = df,                                        # Daily data frame with Season and DTemp
+  df      = df,                                        # Daily data frame with Season and Humidity
   xvar    = "Humidity",                                   # Column to plot on x-axis
   title   = "Distribution of Daily Humidity by Cycle",   # Title
   subtitle= "Distinct humidity ranges across sugarcane phases", # Subtitle
   xlab    = "Daily Humidity (%)",                  # X-axis label
-  units   = "%",                                       # Units appended to mean labels
+  units   = "%",                                       # Unit for mean labels
   x_limits = c(55, 94)   #for readability 
 )
 print(g_humidity_density)
@@ -580,8 +581,8 @@ kurtosis(Growth_data$Humidity)
 skewness(Maturation_data$Humidity)
 kurtosis(Maturation_data$Humidity)
 
-# Solar rdiation(uses pooled daily means computed internally unless you pass pooled_df)
-# Filter to 1984+ 
+# Solar rdiation
+# Filter from 1984+ 
 df_solar84 <- df %>%filter(Year >= 1984)
 
 # Solar radiation density (1984–2024 only)
@@ -605,29 +606,29 @@ kurtosis(Growth84$Solar)
 skewness(Maturation84$Solar)
 kurtosis(Maturation84$Solar)
 
-ggsave(file.path(result_folder, "density_temperature.png"), g_temp_density, width = 12, height = 8, dpi = 300)
-ggsave(file.path(result_folder, "density_rainfall.png"),    g_rain_density, width = 12, height = 8, dpi = 300)
-ggsave(file.path(result_folder, "density_humidity.png"),    g_humidity_density, width = 12, height = 8, dpi = 300)
-ggsave(file.path(result_folder, "density_solar.png"),    g_solar_density, width = 12, height = 8, dpi = 300)
-print(dir_stage)
-cat(paste0("\n📸 Seasonal profiles saved to: ", seasonal_png_path, "\n"))
-cat("\n✅ NASA POWER trend and seasonal analysis completed successfully!\n")
+
+ggsave(filename = "density_temperature.png",path=result_folder,plot= g_temp_density,width = 12, height = 8, dpi = 300)
+ggsave(filename = "density_rainfall.png",path=result_folder,plot= g_rain_density,width = 12, height = 8, dpi = 300)
+ggsave(filename = "density_humidity.png",path=result_folder,plot= g_humidity_density,width = 12, height = 8, dpi = 300)
+ggsave(filename = "density_solar.png",path=result_folder,plot= g_solar_density,width = 12, height = 8, dpi = 300)
 
 
-#Calculating trends per cycles for the 1981-2003 and 2004-2024
 
-# ===================== SPLIT-PERIOD TRENDS BY CYCLE (GENERIC, FULLY COMMENTED) =====================
+
+#Calculating trends per cycles for the 1981-1998,1999-2010 and 2011-2024
+
+# ===================== SPLIT-PERIOD TRENDS BY CYCLE FUNCTION =====================
 
 # ---- 1) Fit OLS slope + 95% CI for a given Season × period ---------------------------------------
 # This function takes a data frame with columns Year and a numeric column (named by y_col)
-# and returns the slope per year, standard error, t-stat, p-value, 95% CI, and R^2.
+# and returns the slope per year, standard error, t-stat, p-value, 95% CI, and R2.
 fit_with_ci <- function(df_in, y_col) {
   # Keep only the rows where Year and the response column are finite numbers (drop NA/Inf)
   df <- df_in %>%
     filter(is.finite(.data[[y_col]]), is.finite(Year))
   
   # If there are fewer than 3 observations, regression isn’t meaningful
-  # NOTE: `3L` is just the integer literal 3 (same as 3); the L suffix marks it as integer in R
+  # NOTE: `3L` is just the integer literal 3 (same as 3); the L suffix marks it as integer in R;had to add otherwise code crashes
   if (nrow(df) < 3L) {
     # Return a single-row tibble filled with NAs (but keep period bounds and sample size)
     return(tibble(
@@ -644,7 +645,7 @@ fit_with_ci <- function(df_in, y_col) {
     ))
   }
   
-  # Fit an ordinary least squares (OLS) regression: response ~ Year
+  # Fit an ordinary least squares (OLS) regression: response and Year
   mod <- lm(df[[y_col]] ~ Year, data = df)
   
   # Extract the slope row (coefficient of Year) as a tidy data frame
@@ -668,15 +669,15 @@ fit_with_ci <- function(df_in, y_col) {
   )
 }
 
-# ---- 2) Build annual means per Season for ANY daily variable in df -------------------------------
-# This function aggregates a daily variable (e.g., "Solar", "DTemp") by Season × Year using mean().
-# You can swap agg_fun if needed (e.g., median).
+# ---- 2) Build annual means per Season for any variable in df -------------------------------
+# This function aggregates a daily variable (e.g., "Solar", "DTemp") by Season and Year using mean().
+
 build_seasonal_annual <- function(df, value_col, agg_fun = mean) {
   # Group by Season and Year to form annual aggregates per cycle
   df %>%
     group_by(Season, Year) %>%                         # define season-year groups
     summarise(
-      !!value_col := agg_fun(.data[[value_col]], na.rm = TRUE),  # compute annual mean (or custom agg)
+      !!value_col := agg_fun(.data[[value_col]], na.rm = TRUE),  # compute annual mean 
       .groups = "drop"                                  # return an ungrouped data frame
     )
 }
@@ -687,7 +688,7 @@ fit_season_period <- function(seasonal_tbl, value_col, y_start, y_end) {
   # Filter to the requested period window (inclusive)
   seasonal_tbl %>%
     filter(Year >= y_start, Year <= y_end) %>%         # keep years in [y_start, y_end]
-    group_by(Season) %>%                               # analyze each cycle separately
+    group_by(Season) %>%                               # analyse each cycle separately
     group_modify(~ fit_with_ci(.x, y_col = value_col)) %>%  # run regression within each cycle
     ungroup() %>%                                      # drop grouping for clean output
     mutate(
@@ -697,11 +698,13 @@ fit_season_period <- function(seasonal_tbl, value_col, y_start, y_end) {
     select(Variable, Period, Season, everything())     # put key columns first
 }
 
-# ---- 4) Convenience wrapper: compute + combine multiple periods ----------------------------------
-# Pass a list of periods like list(c(1981,2003), c(2004,2024)).
+# ---- 4) Compute and combine multiple periods ----------------------------------
+# Pass a list of periods like list(c(1981, 1998),c(1999,2010)).
+
 compute_trends_split <- function(seasonal_tbl, value_col, periods) {
   # Apply fit_season_period() to each (start, end) pair in periods
-  results <- lapply(
+  
+  results <- lapply(      #passing each period elemnets to the function
     periods,
     function(pe) fit_season_period(seasonal_tbl, value_col, y_start = pe[1], y_end = pe[2])
   )
@@ -713,7 +716,7 @@ compute_trends_split <- function(seasonal_tbl, value_col, periods) {
       CI_low_95      = round(CI_low_95, 6),            # round CI lower bound
       CI_high_95     = round(CI_high_95, 6),           # round CI upper bound
       R2             = round(R2, 3),                   # round R-squared
-      p_value        = signif(p_value, 3)              # p-value in scientific-ish format
+      p_value        = signif(p_value, 3)              # p-value in better format
     ) %>%
     arrange(Variable, Season, Period)                  # order rows for easy reading
 }
@@ -722,34 +725,29 @@ compute_trends_split <- function(seasonal_tbl, value_col, periods) {
 # Your daily df already has columns: Season, Year, Solar, DTemp, etc.
 
 # Define the two split periods you want to compare
-periods_split <- list(c(1981, 1999),c(2000,2007), c(2008, 2024))    # first regime and second regime
+periods_split <- list(c(1981, 1998),c(1999,2010), c(2011, 2024))    
 
 # ---- A) SOLAR trends per cycle across the periods --------------------------------------------
 seasonal_solar <- build_seasonal_annual(df, value_col = "Solar")              # annual Solar by Season
-solar_trends_split <- compute_trends_split(seasonal_solar, "Solar", periods_split)  # regressions per period                                                     # view in console
-View(solar_trends_split)   # uncomment in RStudio to open a data viewer tab
+solar_trends_split <- compute_trends_split(seasonal_solar, "Solar", periods_split)  # regressions per period                                                     
+View(solar_trends_split)   
 
 # ---- B) TEMPERATURE trends per cycle across the periods --------------------------------------
 seasonal_temp <- build_seasonal_annual(df, value_col = "DTemp")               # annual Temp by Season
-temp_trends_split <- compute_trends_split(seasonal_temp, "DTemp", periods_split)    # regressions per period                                                      # view in console
-View(temp_trends_split)    # uncomment in RStudio to open a data viewer tab
+temp_trends_split <- compute_trends_split(seasonal_temp, "DTemp", periods_split)    # regressions per period                                                      
+View(temp_trends_split)    
 
 # ---- C) Rainfall trends per cycle across the periods --------------------------------------
 seasonal_rain <- build_seasonal_annual(df, value_col = "DRain")               # annual rain by Season
-rain_trends_split <- compute_trends_split(seasonal_rain, "DRain", periods_split)    # regressions per period                                                      # view in console
+rain_trends_split <- compute_trends_split(seasonal_rain, "DRain", periods_split)    # regressions per period                                                      
 View(rain_trends_split)  
 
 # ---- D) Humidity trends per cycle across the periods --------------------------------------
 seasonal_hum <- build_seasonal_annual(df, value_col = "Humidity")               # humidity by Season
-humid_trends_split <- compute_trends_split(seasonal_hum, "Humidity", periods_split)    # regressions per period                                                      # view in console
+humid_trends_split <- compute_trends_split(seasonal_hum, "Humidity", periods_split)    # regressions per period                                                      
 View(humid_trends_split)  
 
+
+
+cat("\n NASA POWER trend and seasonal analysis completed successfully!\n")
 #======================-----------END OF NASA SCRIPT---------======================#
-
-
-
-
-
-
-
-
