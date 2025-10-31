@@ -25,16 +25,8 @@ source("get_cwd.R")
 # Read the environment file to obtain the database credentials 
 root <- find_root(has_file(".Renviron"))
 readRenviron(file.path(root, ".Renviron"))
-
-cwd <- get_script_dir() 
-descriptive_folder = file.path(cwd, "Analysis", "Descriptive")
+descriptive_folder = get_script_dir()
 result_folder = file.path(descriptive_folder, "results")
-
-# Checks if the folder exists or not - else creates it 
-if (!dir.exists(result_folder)) {
-  dir.create(result_folder, showWarnings = FALSE)
-} 
-
 # Use the credentials to connect to our local database 
 con <- dbConnect(
   RMariaDB::MariaDB(),
@@ -92,9 +84,8 @@ trend_summary <- lapply(trend_models, function(model) {
 }) %>%
   bind_rows()
 
-# Save trend summary
 
-view(trend_summary)
+print(trend_summary)
 
 ##########################Create Trend Plots with 3-Year Moving Average ---
 plot_trend <- function(df, yvar, ylabel, title, color) {
@@ -270,7 +261,6 @@ summary_stats <- df %>%
     .groups = "drop"    # to ungroup the data (it is like removing the data from the folders, simplifying work for further analysis)
   )
 
-view(summary_stats)
 
 ##########################Trend values by cycles ---
 # Fits Value and Year for each Season and Variable (One Season-Year-Variable per line grouped in the same model)
@@ -302,7 +292,6 @@ trend_summary_season <- summary_stats %>%
   ) %>%
   arrange(Var, Season)
 
-view(trend_summary_season)
 
 #####Graphs by cycle
 #1ST FUNCTION FOR TRENDS BY CYCLE
@@ -738,22 +727,22 @@ periods_split <- list(c(1981, 1998),c(1999,2010), c(2011, 2024))
 # ---- A) SOLAR trends per cycle across the periods --------------------------------------------
 seasonal_solar <- build_seasonal_annual(df, value_col = "Solar")              # annual Solar by Season
 solar_trends_split <- compute_trends_split(seasonal_solar, "Solar", periods_split)  # regressions per period                                                     
-View(solar_trends_split)   
+print(solar_trends_split)   
 
 # ---- B) TEMPERATURE trends per cycle across the periods --------------------------------------
 seasonal_temp <- build_seasonal_annual(df, value_col = "DTemp")               # annual Temp by Season
 temp_trends_split <- compute_trends_split(seasonal_temp, "DTemp", periods_split)    # regressions per period                                                      
-View(temp_trends_split)    
+print(temp_trends_split)    
 
 # ---- C) Rainfall trends per cycle across the periods --------------------------------------
 seasonal_rain <- build_seasonal_annual(df, value_col = "DRain")               # annual rain by Season
 rain_trends_split <- compute_trends_split(seasonal_rain, "DRain", periods_split)    # regressions per period                                                      
-View(rain_trends_split)  
+print(rain_trends_split)  
 
 # ---- D) Humidity trends per cycle across the periods --------------------------------------
 seasonal_hum <- build_seasonal_annual(df, value_col = "Humidity")               # humidity by Season
 humid_trends_split <- compute_trends_split(seasonal_hum, "Humidity", periods_split)    # regressions per period                                                      
-View(humid_trends_split)  
+print(humid_trends_split)  
 
 
 

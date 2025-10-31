@@ -25,16 +25,8 @@ source("get_cwd.R")
 # Read the environment file to obtain the database credentials 
 root <- find_root(has_file(".Renviron"))
 readRenviron(file.path(root, ".Renviron"))
-
-cwd <- get_script_dir() 
-descriptive_folder = file.path(cwd, "Analysis", "Descriptive")
+descriptive_folder = get_script_dir()
 result_folder = file.path(descriptive_folder, "results")
-
-# Checks if the folder exists or not - else creates it 
-if (!dir.exists(result_folder)) {
-  dir.create(result_folder, showWarnings = FALSE)
-} 
-
 # Use the credentials to connect to our local database 
 con <- dbConnect(
   RMariaDB::MariaDB(),
@@ -107,7 +99,7 @@ df_yoy <- GDP_DATA %>%
   ) %>%
   filter(!is.na(d_GDP), !is.na(d_Yield), !is.na(d_Production), !is.na(d_Area))
 
-view(df_yoy)
+print(df_yoy)
 
 # ---------- 2) Long format for a single-panel plot ----------
 plot_df <- df_yoy %>%
