@@ -6,6 +6,7 @@ required_packages <- c(
   "zoo",        # Ordered time-series objects
   "DBI",        # Standard database interface for R
   "httr",       # HTTP requests for APIs
+  "curl",       # For downloading or uploading data from URLs 
   "mgcv",       # Generalized Additive Models
   "caret",      # ML training & resampling wrappers
   "broom",      # Tidy model outputs (data frames)

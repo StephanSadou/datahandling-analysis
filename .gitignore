@@ -6,3 +6,7 @@ R/.Renviron
 R\.Renviron
 data_raw/
 data_stage/
+R/Analysis/Descriptive/results/
+R/Analysis/Explanatory/results/
+R/Analysis/Predictive/results/
+skills_demo_nyc/results/
