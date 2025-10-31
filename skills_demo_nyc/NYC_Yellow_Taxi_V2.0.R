@@ -38,7 +38,8 @@ for (f in folders) {
 # Files inside their respective folders
 raw_file   <- file.path(script.dir, "data_raw", "yellow_tripdata_2024-01.parquet")  # <-- put your file here
 clean_file <- file.path(script.dir, "data_stage", "taxi_clean.parquet")
-plot_file  <- file.path(script.dir, "figures", "trips_per_day.png")
+plot_file1  <- file.path(script.dir, "figures", "trips_per_day.png")
+plot_file2  <- file.path(script.dir, "figures", "Daily_average_fare_topyear.png")
 sum_file   <- file.path(script.dir, "data_stage", "summary_by_day.csv")
 
 # ---- Step 1: Import Data -----------------------------------
@@ -91,7 +92,7 @@ trips_per_day <-ggplot(trips_per_day, aes(x = pickup_date, y = n)) +
        x = "Date", y = "Number of trips") +
   theme_minimal(base_size = 12)
 
-ggsave(plot_file, width = 8, height = 4.5, dpi = 150)
+ggsave(plot_file1, width = 8, height = 4.5, dpi = 150)
 
 
 
@@ -108,12 +109,12 @@ write.csv(summary_by_day, sum_file, row.names = FALSE)
 
 #2.2: Plot of daily average fare for top year
 
-Daily_avg_fare<- ggplot(summary_by_day, aes(pickup_date, avg_fare)) +
+ggplot(summary_by_day, aes(pickup_date, avg_fare)) +
   geom_col() +
   labs( title = paste("Average daily fare for top year: 2024"),x = "Day", y = "Average fare") +
   theme_minimal()
 
-ggsave(plot_file, width = 8, height = 4.5, dpi = 150)
+ggsave(plot_file2, width = 8, height = 4.5, dpi = 150)
 
 cat("Done:\n",
     "- Cleaned Parquet ->", clean_file, "\n",
