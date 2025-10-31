@@ -11,7 +11,6 @@ required_packages <- c(
   "broom",      # Tidy model outputs (data frames)
   "arrow",      # Arrow/Parquet columnar I/O
   "e1071",      # ML algorithms (e.g., SVM, Naive Bayes)
-  "graph",      # Graph data structures
   "dplyr",      # Data manipulation grammar
   "tidyr",      # Tidy reshaping (pivot/unnest)
   "readr",      # Fast, friendly CSV/TSV import
@@ -19,7 +18,6 @@ required_packages <- c(
   "ranger",     # Fast Random Forests
   "scales",     # Axis/label scaling helpers
   "energy",     # Energy statistics (e.g., distance correlation)
-  "gratia",     # GAM diagnostics & plots
   "lmtest",     # Tests for linear models
   "Metrics",    # Model evaluation metrics (RMSE/MAE/…)
   "FAOSTAT",    # FAO datasets access
@@ -32,7 +30,6 @@ required_packages <- c(
   "reshape2",   # Reshape long<->wide
   "jsonlite",   # JSON parsing & writing
   "sandwich",   # Robust covariance (sandwich) estimators
-  "Rgraphiz",   # Graphviz bindings for graph viz
   "outliers",   # Outlier detection utilities
   "patchwork",  # Compose multiple ggplots
   "rprojroot",  # Project-root discovery

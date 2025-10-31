@@ -1,3 +1,4 @@
+DROP DATABASE IF EXISTS Data_Handling;
 CREATE DATABASE Data_Handling;
 USE Data_Handling;
 

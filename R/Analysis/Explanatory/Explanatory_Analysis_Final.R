@@ -3,7 +3,7 @@
 ###############################################################################
 
 # ---------------------------
-# 0. Libraries & setup
+# Libraries & setup
 # ---------------------------
 library(dplyr)
 library(lubridate)
@@ -15,7 +15,6 @@ library(data.table)
 library(energy)    # distance correlation
 library(car)       # VIF
 library(mgcv)      # GAM
-library(gratia)    # nicer GAM plots (optional)
 library(broom)     # tidy outputs
 library(lmtest)
 library(DBI)
@@ -25,14 +24,22 @@ library(readr)
 #Connect to DB - User to include host and password information
 con <- dbConnect(
   RMariaDB::MariaDB(),
-  dbname = "Data_Handling",
-  host = "127.0.0.1",
-  user = "root",
-  password = "HNBSdpl&2568pd")
+  dbname = Sys.getenv("DB_NAME"),
+  host = Sys.getenv("DB_HOST"),
+  user = Sys.getenv("DB_USER"),
+  password = Sys.getenv("DB_PASSWORD")
+)
 
 #⃣ Load data from views from SQL Database
 
-if (!dir.exists("results")) dir.create("results")
+# ---------------------------
+# Getting current path of predictive analysis folder 
+# ---------------------------
+source("get_cwd.R") # Invoke script from root project folder 
+cwd <- get_script_dir()
+result_folder <- file.path(cwd, "Analysis", "Explanatory", "results")
+
+# if (!dir.exists(file.path(get_script_dir(),"results"))) dir.create(file.path(get_script_dir(),"results"))
 
 df_yield  <- dbReadTable(con, "current_compiled_data")
 
@@ -50,7 +57,7 @@ climate_variables <- c(
 df_yield <- df_yield %>% mutate(across(all_of(climate_variables), as.numeric))
 
 # Save merged snapshot
-fwrite(df_yield, file = "results/df_yield_merged.csv")
+fwrite(df_yield, file = file.path(result_folder,  "df_yield_merged.csv"))
 
 # ---------------------------
 # Exploratory correlation: Pearson, Spearman heatmaps
@@ -74,7 +81,7 @@ pearson_plot <- ggplot(pearson_cor_melt, aes(x = Var1, y = Var2, fill = value)) 
         axis.title.y = element_blank()) +
   labs(title = "Pearson Correlation Matrix (Yield & Seasonal Climate)")
 
-ggsave("results/pearson_correlation_heatmap.png", pearson_plot, width = 9, height = 6, dpi = 300)
+ggsave(file.path(result_folder, "pearson_correlation_heatmap.png"), pearson_plot, width = 9, height = 6, dpi = 300)
 
 # Spearman
 spearman_cor <- cor(cor_data, use = "complete.obs", method = "spearman")
@@ -91,14 +98,14 @@ spearman_plot <- ggplot(spearman_cor_melt, aes(x = Var1, y = Var2, fill = value)
         axis.title.y = element_blank()) +
   labs(title = "Spearman Correlation Matrix (Yield & Seasonal Climate)")
 
-ggsave("results/spearman_correlation_heatmap.png", spearman_plot, width = 9, height = 6, dpi = 300)
+ggsave(file.path(result_folder, "spearman_correlation_heatmap.png"), spearman_plot, width = 9, height = 6, dpi = 300)
 
 # Sid-by-side display for easier comparison
 pearson_plot + spearman_plot
 
 # Save correlation matrices for inspection
-fwrite(as.data.frame(pearson_cor), "results/pearson_cor_matrix.csv")
-fwrite(as.data.frame(spearman_cor), "results/spearman_cor_matrix.csv")
+fwrite(as.data.frame(pearson_cor), file.path(result_folder, "pearson_cor_matrix.csv"))
+fwrite(as.data.frame(spearman_cor), file.path(result_folder, "spearman_cor_matrix.csv"))
 
 # ---------------------------
 # Pairwise correlation significance tests
@@ -127,7 +134,7 @@ for (i in seq_along(vars)) {
   test_res$Spearman_r[i] <- round(st$stat, 3)
   test_res$Spearman_p[i] <- round(st$p.value, 3)
 }
-fwrite(test_res, "results/correlation_tests_summary.csv")
+fwrite(test_res, file.path(result_folder, "correlation_tests_summary.csv"))
 
 # ---------------------------
 # Lagged variables — keeping 1-year lags
@@ -138,7 +145,7 @@ lagged_df_yield  <- dbReadTable(con, "lagged_compiled_data")
 str(lagged_df_yield)
 
 # Save lagged snapshot
-fwrite(lagged_df_yield, "results/lagged_df_yield.csv")
+fwrite(lagged_df_yield, file.path(result_folder, "lagged_df_yield.csv"))
 
 # Correlation heatmaps for lagged variables (Pearson & Spearman)
 lagged_variables <- c(
@@ -176,14 +183,14 @@ lagged_spearman_plot <- ggplot(lagged_spearman_melt, aes(x = Var1, y = Var2, fil
         panel.grid = element_blank()) +
   labs(title = "Lagged Spearman Correlation Matrix", x = NULL , y = NULL)
 
-ggsave("results/lagged_pearson_heatmap.png", lagged_pearson_plot, width = 9, height = 6, dpi = 300)
-ggsave("results/lagged_spearman_heatmap.png", lagged_spearman_plot, width = 9, height = 6, dpi = 300)
+ggsave(file.path(result_folder, "lagged_pearson_heatmap.png"), lagged_pearson_plot, width = 9, height = 6, dpi = 300)
+ggsave(file.path(result_folder, "lagged_spearman_heatmap.png"), lagged_spearman_plot, width = 9, height = 6, dpi = 300)
 
 # Sid-by-side display for easier comparison
 lagged_pearson_plot + lagged_spearman_plot
 
-fwrite(as.data.frame(lagged_pearson_cor), "results/lagged_pearson_cor_matrix.csv")
-fwrite(as.data.frame(lagged_spearman_cor), "results/lagged_spearman_cor_matrix.csv")
+fwrite(as.data.frame(lagged_pearson_cor), file.path(result_folder, "lagged_pearson_cor_matrix.csv"))
+fwrite(as.data.frame(lagged_spearman_cor), file.path(result_folder, "lagged_spearman_cor_matrix.csv"))
 
 
 # Side-by-side comparison of pearson correlation and lagged pearson correlation
@@ -209,14 +216,14 @@ lagged_dcor_values <- sapply(lagged_adv_vars, function(x) dcor(lagged_yield_vec,
 adv_summary <- data.frame(
   Distance = round(dcor_values, 3)
 )
-fwrite(adv_summary, "results/advanced_dependence_summary.csv")
+fwrite(adv_summary, file.path(result_folder, "advanced_dependence_summary.csv"))
 print(adv_summary)
 
 lagged_adv_summary <- data.frame(
   Distance = round(lagged_dcor_values, 3)
 )
 
-fwrite(lagged_adv_summary, "results/lagged_advanced_dependence_summary.csv")
+fwrite(lagged_adv_summary, file.path(result_folder, "lagged_advanced_dependence_summary.csv"))
 print(lagged_adv_summary)
 
 # ---------------------------
@@ -228,7 +235,7 @@ lm_for_vif_formula <- as.formula(paste("Yield ~", paste(present_predictors, coll
 vif_model <- lm(lm_for_vif_formula, data = df_yield)
 vif_values <- tryCatch(vif(vif_model), error = function(e) NA)
 vif_df <- data.frame(Variable = names(vif_values), VIF = round(as.numeric(vif_values), 2))
-fwrite(vif_df, "results/vif_values.csv")
+fwrite(vif_df, file.path(result_folder, "vif_values.csv"))
 print(vif_df)
 
 lagged_predictors <- climate_variables[climate_variables %in% names(lagged_df_yield)]
@@ -236,7 +243,7 @@ lm_for_lagged_vif_formula <- as.formula(paste("Yield ~", paste(lagged_predictors
 lagged_vif_model <- lm(lm_for_lagged_vif_formula, data = lagged_df_yield)
 lagged_vif_values <- tryCatch(vif(lagged_vif_model), error = function(e) NA)
 lagged_vif_df <- data.frame(Variable = names(lagged_vif_values), VIF = round(as.numeric(lagged_vif_values), 2))
-fwrite(lagged_vif_df, "results/lagged_vif_values.csv")
+fwrite(lagged_vif_df, file.path(result_folder, "lagged_vif_values.csv"))
 print(lagged_vif_df)
 
 # Flag problematic multicollinearity (VIF > 5)
@@ -274,8 +281,7 @@ model_df <- lagged_df_yield %>%
   drop_na()
 
 
-fwrite(model_df, "results/GAM_model.csv")
-print(model_df)
+fwrite(model_df, file.path(result_folder, "GAM_model.csv"))
 
 # ---------------------------
 # Decide variables for different models : detect nonlinearity
@@ -369,98 +375,40 @@ gam_summary <- summary(gam_model)
 print(gam_summary)
 gam_summary$r.sq
 
-saveRDS(gam_model, "results/gam_model.rds")
+saveRDS(gam_model, file.path(result_folder, "gam_model.rds"))
 
 # ---------------------------
 # GAM diagnostics & plotting (explanatory)
 # ---------------------------
 # Plot partial effects (base R plots)
-png("results/gam_partial_effects.png", width = 1600, height = 1200)
+png(file.path(result_folder, "gam_partial_effects.png"), width = 1600, height = 1200)
 par(mfrow = c(4,3), mar = c(4,4,2,1))
 plot(gam_model, shade = TRUE, seWithMean = TRUE, pages = 1)
-dev.off()
-
-# Nicer ggplots using gratia
-png("results/gam_draws.png", width = 1600, height = 1200)
-draw(gam_model, residuals = FALSE)
 dev.off()
 
 # Residual diagnostics
 model_df$gam_fitted <- predict(gam_model)
 model_df$gam_resid <- residuals(gam_model)
 
-png("results/gam_residuals_acf.png", width = 900, height = 600)
+png(file.path(result_folder, "gam_residuals_acf.png"), width = 900, height = 600)
 par(mfrow = c(2,1))
 plot(model_df$Harvest_Year, model_df$gam_resid, type = "o", main = "GAM residuals over time", ylab = "Residual")
 acf(model_df$gam_resid, main = "ACF of GAM residuals")
 dev.off()
 
-
-# ---------------------------
-# Descriptive economic context (explanatory only)
-# ---------------------------
-model_df <- model_df %>%
-  mutate(
-    Predicted_Yield = gam_fitted,
-    Yield_Change_pct = (Predicted_Yield - mean(Yield_Value, na.rm = TRUE)) / mean(Yield_Value, na.rm = TRUE) * 100,
-    GDP_Impact_pct = Yield_Change_pct * (Agri_GDP_Share / 100)  # approximate, descriptive
-  )
-
-econ_summary <- model_df %>%
-  summarise(
-    Avg_Yield = mean(Yield_Value, na.rm = TRUE),
-    Avg_Predicted_Yield = mean(Predicted_Yield, na.rm = TRUE),
-    Avg_Yield_Change_pct = mean(Yield_Change_pct, na.rm = TRUE),
-    Avg_GDP_Impact_pct = mean(GDP_Impact_pct, na.rm = TRUE)
-  )
-fwrite(econ_summary, "results/economic_summary.csv")
-
-yield_gdp_plot <- ggplot(model_df, aes(x = Yield_Change_pct, y = GDP_Impact_pct)) +
-  geom_point(
-    color = "#1A9850",  # Green points
-    size = 3,
-    alpha = 0.8
-  ) +
-  geom_smooth(
-    method = "lm",
-    se = TRUE,
-    color = "#D73027",  # Red trend line
-    linewidth = 1
-  ) +
-  theme_minimal(base_size = 13) +
-  labs(
-    title = "Relationship Between Sugarcane Yield and Agricultural GDP Share (1981–2023)",
-    subtitle = "Mauritius — Source: FAOSTAT & World Bank",
-    x = "Sugarcane Yield (hg/ha)",
-    y = "% change of GDP",
-    caption = "Note: Linear trend with 95% confidence interval"
-  ) +
-  theme(
-    plot.title = element_text(face = "bold", size = 14),
-    plot.subtitle = element_text(size = 11, color = "gray25"),
-    axis.text = element_text(size = 11, color = "black"),
-    axis.title = element_text(size = 12),
-    panel.grid.minor = element_blank(),
-    plot.caption = element_text(size = 10, color = "gray40", face = "italic")
-  )
-
-print(yield_gdp_plot)
-
-ggsave("results/yield_vs_gdp.png", yield_gdp_plot, width = 8, height = 6, dpi = 300)
-
 # ---------------------------
 # 16. Save tidy coefficient table (for explanatory report)
 # ---------------------------
 gam_coefs <- broom::tidy(gam_model)
-fwrite(gam_coefs, "results/gam_coefs.csv")
+fwrite(gam_coefs, file.path(result_folder, "gam_coefs.csv"))
 # Also save partial effect edf summary
 edf_table <- as.data.frame(cbind(term = rownames(gam_summary$s.table), gam_summary$s.table))
-fwrite(edf_table, "results/gam_edf_table.csv")
+fwrite(edf_table, file.path(result_folder, "gam_edf_table.csv"))
 
 # ---------------------------
 # 17. Final messages & recommendations
 # ---------------------------
-cat("\nAnalysis complete. Results and plots saved in ./results/\n")
+cat("\nAnalysis complete. Results and plots saved in ./Explanatory -> results/\n")
 cat("Key files:\n - results/df_yield_merged.csv\n - results/pearson_correlation_heatmap.png\n - results/spearman_correlation_heatmap.png\n - results/lagged_pearson_heatmap.png\n - results/gam_summary.txt\n - results/gam_partial_effects.png\n - results/economic_summary.csv\n\n")
 
 # End of script

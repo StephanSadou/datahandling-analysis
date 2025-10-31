@@ -1,4 +1,4 @@
-DB_HOST=127.0.0.1
-DB_NAME="data_handling"
-DB_USER=root
-DB_PASSWORD=Ju34A~6LkLbbI*=@CBj0
+DB_HOST=""
+DB_NAME="Data_Handling"
+DB_USER=""
+DB_PASSWORD=""
