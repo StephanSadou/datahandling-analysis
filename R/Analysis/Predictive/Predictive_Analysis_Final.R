@@ -406,8 +406,15 @@ repeats <- 3
 #  - mtry: how many variables to try at each split (search wide around sqrt(p))
 #  - min.node.size: minimum samples in a leaf (smaller → deeper trees)
 #  - splitrule: "variance" for regression (fixed here)
-mtry_candidates <- unique(pmax(1L, round(c(sqrt(p) * c(0.5, 1, 2),
-                                           seq(1, p, length.out = p)))))
+mtry_candidates <- unique(
+  as.integer(
+    pmin(p, pmax(1L, round(c(sqrt(p) * c(0.5, 1, 2), seq_len(p)))))
+  )
+)
+
+# For very small p, ensure we have a simple set like {1, p}
+if (p <= 2L) mtry_candidates <- unique(as.integer(c(1L, p)))
+
 min_node_candidates <- c(1L, 2L, 3L, 5L, 7L, 10L)
 
 tune_grid <- expand.grid(
