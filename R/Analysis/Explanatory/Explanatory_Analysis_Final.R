@@ -15,7 +15,6 @@ library(data.table)
 library(energy)    # distance correlation
 library(car)       # VIF
 library(mgcv)      # GAM
-library(gratia)    # nicer GAM plots (optional)
 library(broom)     # tidy outputs
 library(lmtest)
 library(DBI)
@@ -283,7 +282,6 @@ model_df <- lagged_df_yield %>%
 
 
 fwrite(model_df, file.path(result_folder, "GAM_model.csv"))
-print(model_df)
 
 # ---------------------------
 # Decide variables for different models : detect nonlinearity
@@ -386,11 +384,6 @@ saveRDS(gam_model, file.path(result_folder, "gam_model.rds"))
 png(file.path(result_folder, "gam_partial_effects.png"), width = 1600, height = 1200)
 par(mfrow = c(4,3), mar = c(4,4,2,1))
 plot(gam_model, shade = TRUE, seWithMean = TRUE, pages = 1)
-dev.off()
-
-# Nicer ggplots using gratia
-png(file.path(result_folder, "gam_draws.png"), width = 1600, height = 1200)
-draw(gam_model, residuals = FALSE)
 dev.off()
 
 # Residual diagnostics
