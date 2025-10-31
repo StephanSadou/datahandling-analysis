@@ -22,7 +22,9 @@ data_pipeline <- function() {
   source("Data_Loading.R")
   
   cli_progress_step("Phase 5: Analysis Stage")
-  # source("<Final Descriptive R script goes here>")
+  source(file.path(getwd(), "Analysis", "Descriptive", "FAOSTAT.r"))
+  source(file.path(getwd(), "Analysis", "Descriptive", "NASA_FINAL_v3.r"))
+  source(file.path(getwd(), "Analysis", "Descriptive", "WB_FINAL_v2.r"))
   source(file.path(getwd(), "Analysis", "Explanatory", "Explanatory_Analysis_Final.R"))
   source(file.path(getwd(), "Analysis", "Predictive", "Predictive_Analysis_Final.R"))
   # cli_progress_step("Phase 6: Part B - NYC Taxi Exercise")
