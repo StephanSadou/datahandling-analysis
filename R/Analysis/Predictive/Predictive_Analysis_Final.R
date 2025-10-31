@@ -22,6 +22,11 @@ cwd <- get_script_dir()
 predictive_folder <- file.path(cwd, 'Analysis', "Predictive")
 result_folder <- file.path(predictive_folder, "results")
 
+# Checks if the folder exists or not - else creates it 
+if (!dir.exists(result_folder)) {
+  dir.create(result_folder, showWarnings = FALSE)
+} 
+
 # ---------------------------
 # 1. Load the model produced in the explanatory analysis 
 # --------------------------- 
