@@ -21,6 +21,11 @@ nyc_folder <- file.path(cwd, "..", "skills_demo_nyc")
 # We also have a results folder where we will store our output 
 result_folder <- file.path(nyc_folder, "results")
 
+# Checks if the folder exists or not - else creates it 
+if (!dir.exists(result_folder)) {
+  dir.create(result_folder, showWarnings = FALSE)
+} 
+
 # Defining the path folders 
 data_raw   <- file.path(cwd, "..", "data_raw")
 data_stage <- file.path(cwd, "..", "data_stage")

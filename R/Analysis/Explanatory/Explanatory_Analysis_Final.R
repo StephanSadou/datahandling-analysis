@@ -37,9 +37,13 @@ con <- dbConnect(
 # ---------------------------
 source("get_cwd.R") # Invoke script from root project folder 
 cwd <- get_script_dir()
-result_folder <- file.path(cwd, "Analysis", "Explanatory", "results")
+explanatory_folder <- file.path(cwd, "Analysis", "Explanatory")
+result_folder <- file.path(explanatory_folder, "results")
 
-# if (!dir.exists(file.path(get_script_dir(),"results"))) dir.create(file.path(get_script_dir(),"results"))
+# Checks if the folder exists or not - else creates it 
+if (!dir.exists(result_folder)) {
+  dir.create(result_folder, showWarnings = FALSE)
+} 
 
 df_yield  <- dbReadTable(con, "current_compiled_data")
 
