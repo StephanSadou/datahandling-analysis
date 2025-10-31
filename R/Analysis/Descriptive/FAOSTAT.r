@@ -22,15 +22,8 @@ source("get_cwd.R")
 root <- find_root(has_file(".Renviron"))
 readRenviron(file.path(root, ".Renviron"))
 
-cwd <- get_script_dir() 
-descriptive_folder = file.path(cwd, "Analysis", "Descriptive")
+descriptive_folder = get_script_dir()
 result_folder = file.path(descriptive_folder, "results")
-
-# Checks if the folder exists or not - else creates it 
-if (!dir.exists(result_folder)) {
-  dir.create(result_folder, showWarnings = FALSE)
-} 
-
 # Use the credentials to connect to our local database 
 con <- dbConnect(
   RMariaDB::MariaDB(),
@@ -63,9 +56,6 @@ sugarcane_prod <- sugarcane_prod %>%
 mauritius_area <- mauritius_area %>%
   mutate(Moving_Avg = rollmean(Area_Harvested, k = 3, fill = NA, align = "right"))
 
-view(mauritius_yield)
-view(sugarcane_prod)
-view(mauritius_area)
 # ========================================================= #
 # --- 1. TREND PLOTS ---
 # ========================================================= #
