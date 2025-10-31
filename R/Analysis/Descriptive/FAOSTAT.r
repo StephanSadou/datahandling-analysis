@@ -22,8 +22,15 @@ source("get_cwd.R")
 root <- find_root(has_file(".Renviron"))
 readRenviron(file.path(root, ".Renviron"))
 
-descriptive_folder = get_script_dir()
+cwd_des = get_script_dir()
+descriptive_folder = file.path(cwd_des, 'Analysis', "Descriptive")
 result_folder = file.path(descriptive_folder, "results")
+
+# Checks if the folder exists or not - else creates it 
+if (!dir.exists(result_folder)) {
+  dir.create(result_folder, showWarnings = FALSE)
+} 
+
 # Use the credentials to connect to our local database 
 con <- dbConnect(
   RMariaDB::MariaDB(),

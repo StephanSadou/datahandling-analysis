@@ -18,8 +18,8 @@ library(doParallel)
 # 0. Getting current path of predictive analysis folder 
 # ---------------------------
 source("get_cwd.R") # Invoke script from root project folder 
-cwd <- get_script_dir()
-predictive_folder <- file.path(cwd, 'Analysis', "Predictive")
+cwd_pred <- get_script_dir()
+predictive_folder <- file.path(cwd_pred, 'Analysis', "Predictive")
 result_folder <- file.path(predictive_folder, "results")
 
 # Checks if the folder exists or not - else creates it 

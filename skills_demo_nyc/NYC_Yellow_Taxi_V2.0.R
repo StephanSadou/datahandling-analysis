@@ -117,5 +117,5 @@ ggsave(plot_file2, average_daily_fare, width = 8, height = 4.5, dpi = 150)
 
 cat("Done:\n",
     "- Cleaned Parquet ->", clean_file, "\n",
-    "- Plot ->", plot_file, "\n",
+    "- Plot ->", plot_file2, "\n",
     "- Summary CSV ->", sum_file, "\n")

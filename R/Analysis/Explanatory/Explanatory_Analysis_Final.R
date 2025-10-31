@@ -36,9 +36,9 @@ con <- dbConnect(
 # Getting current path of predictive analysis folder 
 # ---------------------------
 source("get_cwd.R") # Invoke script from root project folder 
-cwd <- get_script_dir()
-explanatory_folder <- file.path(cwd, "Analysis", "Explanatory")
-result_folder <- file.path(explanatory_folder, "results")
+cwd_exp = get_script_dir()
+explanatory_folder = file.path(cwd_exp, "Analysis", "Explanatory")
+result_folder = file.path(explanatory_folder, "results")
 
 # Checks if the folder exists or not - else creates it 
 if (!dir.exists(result_folder)) {
